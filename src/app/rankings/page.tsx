@@ -1,4 +1,55 @@
 import { LeagueShell } from "@/components/league-shell";
 import { leaderboard } from "@/lib/data";
 
-export default function RankingsPage() { const list = leaderboard(); return <LeagueShell><section className="page-title"><p>CHAMPION RANKING</p><h1>排行榜中心</h1><span>用战绩见证实力，用排名证明热爱。</span></section><section className="podium">{list.slice(0, 3).map((p, index) => <div className={`podium-card place-${index + 1}`} key={p.id}><em>TOP {index + 1}</em><img src={p.avatar} alt=""/><h2>{p.name}</h2><p>{p.position} · {p.rank}</p><b>{p.winRate}%</b><span>胜率</span></div>)}</section><section className="rank-table"><div className="rank-head"><span>排名</span><span>选手</span><span>位置</span><span>胜/负</span><span>胜率</span><span>KDA</span></div>{list.map((p, index) => <div className="rank-row" key={p.id}><strong>{index + 1}</strong><div><img src={p.avatar} alt=""/><b>{p.name}</b><small>{p.gameName}</small></div><span>{p.position}</span><span>{p.wins} / {p.losses}</span><span className="violet">{p.winRate}%</span><span>{p.kda}</span></div>)}</section></LeagueShell>; }
+export default function RankingsPage() {
+  const list = leaderboard();
+  return (
+    <LeagueShell>
+      <section className="page-title">
+        <p>CHAMPION RANKING</p>
+        <h1>排行榜中心</h1>
+        <span>用战绩见证实力，用排名证明热爱。</span>
+      </section>
+      <section className="podium">
+        {list.slice(0, 3).map((p, index) => (
+          <div className={`podium-card place-${index + 1}`} key={p.id}>
+            <em>TOP {index + 1}</em>
+            <img src={p.avatar} alt="" />
+            <h2>{p.name}</h2>
+            <p>
+              {p.position} · {p.rank}
+            </p>
+            <b>{p.winRate}%</b>
+            <span>胜率</span>
+          </div>
+        ))}
+      </section>
+      <section className="rank-table">
+        <div className="rank-head">
+          <span>排名</span>
+          <span>选手</span>
+          <span>位置</span>
+          <span>胜/负</span>
+          <span>胜率</span>
+          <span>KDA</span>
+        </div>
+        {list.map((p, index) => (
+          <div className="rank-row" key={p.id}>
+            <strong>{index + 1}</strong>
+            <div>
+              <img src={p.avatar} alt="" />
+              <b>{p.name}</b>
+              <small>{p.gameName}</small>
+            </div>
+            <span>{p.position}</span>
+            <span>
+              {p.wins} / {p.losses}
+            </span>
+            <span className="violet">{p.winRate}%</span>
+            <span>{p.kda}</span>
+          </div>
+        ))}
+      </section>
+    </LeagueShell>
+  );
+}

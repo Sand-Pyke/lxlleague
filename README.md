@@ -24,17 +24,17 @@ npm run start
 
 ## 路由
 
-| 页面 | 路径 |
-| --- | --- |
-| 首页 | `/` |
-| 比赛中心 | `/matches` |
-| 选手中心 | `/players` |
-| 排行榜 | `/rankings` |
-| 个人主页 | `/profile` |
-| 赛事详情 | `/matches/:id` |
+| 页面     | 路径                  |
+| -------- | --------------------- |
+| 首页     | `/`                   |
+| 比赛中心 | `/matches`            |
+| 选手中心 | `/players`            |
+| 排行榜   | `/rankings`           |
+| 个人主页 | `/profile`            |
+| 赛事详情 | `/matches/:id`        |
 | 阵容对位 | `/matches/:id/lineup` |
 | 赛果详情 | `/matches/:id/result` |
-| 管理后台 | `/admin` |
+| 管理后台 | `/admin`              |
 
 ## API
 
