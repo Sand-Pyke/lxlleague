@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { LeagueShell } from "@/components/league-shell";
 import { getMatch, players } from "@/lib/data";
 
 export default async function Lineup({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const match = getMatch(Number(id));
+  if (!match) notFound();
   return (
     <LeagueShell>
       <div className="back">
