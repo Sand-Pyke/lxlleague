@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { LeagueShell, Status } from "@/components/league-shell";
 import { MatchCard } from "@/components/match-card";
-import { leaderboard, matches } from "@/lib/data";
+import { leaderboard, matches, players } from "@/lib/data";
 
 export default function Home() {
   const leaders = leaderboard().slice(0, 5);
+  const recentMatch = matches.find((match) => match.status === "FINISHED");
+  const activeMatchCount = matches.filter((match) => match.status === "LIVE").length;
+
   return (
     <LeagueShell>
       <section className="hero">
@@ -21,19 +24,20 @@ export default function Home() {
         </div>
         <div className="hero-stats">
           <div>
-            <b>24</b>
+            <b>{players.length}</b>
             <span>注册选手</span>
           </div>
           <div>
-            <b>12</b>
+            <b>{matches.filter((match) => match.status === "FINISHED").length}</b>
             <span>已完成对局</span>
           </div>
           <div>
-            <b>4</b>
+            <b>{activeMatchCount}</b>
             <span>活跃赛事</span>
           </div>
         </div>
       </section>
+
       <section className="section-heading">
         <div>
           <p>LIVE BOARD</p>
@@ -41,11 +45,16 @@ export default function Home() {
         </div>
         <Link href="/matches">查看全部 →</Link>
       </section>
-      <div className="match-grid">
-        {matches.slice(0, 2).map((match) => (
-          <MatchCard key={match.id} match={match} />
-        ))}
-      </div>
+      {matches.length ? (
+        <div className="match-grid">
+          {matches.slice(0, 2).map((match) => (
+            <MatchCard key={match.id} match={match} />
+          ))}
+        </div>
+      ) : (
+        <div className="empty">暂无赛事数据</div>
+      )}
+
       <div className="home-grid">
         <section className="panel">
           <div className="section-heading compact">
@@ -55,36 +64,47 @@ export default function Home() {
             </div>
             <Link href="/rankings">完整榜单 →</Link>
           </div>
-          {leaders.map((player, i) => (
-            <div className="rank-line" key={player.id}>
-              <strong className={`rank-number rank-${i + 1}`}>{i + 1}</strong>
-              <img src={player.avatar} alt="" />
-              <div>
-                <b>{player.name}</b>
-                <small>
-                  {player.position} · {player.rank}
-                </small>
+          {leaders.length ? (
+            leaders.map((player, index) => (
+              <div className="rank-line" key={player.id}>
+                <strong className={`rank-number rank-${index + 1}`}>{index + 1}</strong>
+                <img src={player.avatar} alt="" />
+                <div>
+                  <b>{player.name}</b>
+                  <small>
+                    {player.position} · {player.rank}
+                  </small>
+                </div>
+                <span>{player.winRate}% 胜率</span>
               </div>
-              <span>{player.winRate}% 胜率</span>
-            </div>
-          ))}
+            ))
+          ) : (
+            <div className="empty">暂无选手数据</div>
+          )}
         </section>
+
         <section className="panel scoreboard">
           <p>RECENT RESULT</p>
-          <h2>{matches[2].name}</h2>
-          <div className="score-row">
-            <b>{matches[2].teams[0]}</b>
-            <strong>
-              {matches[2].score[0]} <i>:</i> {matches[2].score[1]}
-            </strong>
-            <b>{matches[2].teams[1]}</b>
-          </div>
-          <div className="result-note">
-            <Status status="FINISHED" /> {matches[2].round}
-          </div>
-          <Link href="/matches/3/result" className="text-link">
-            查看本场数据 →
-          </Link>
+          {recentMatch ? (
+            <>
+              <h2>{recentMatch.name}</h2>
+              <div className="score-row">
+                <b>{recentMatch.teams[0]}</b>
+                <strong>
+                  {recentMatch.score[0]} <i>:</i> {recentMatch.score[1]}
+                </strong>
+                <b>{recentMatch.teams[1]}</b>
+              </div>
+              <div className="result-note">
+                <Status status="FINISHED" /> {recentMatch.round}
+              </div>
+              <Link href={`/matches/${recentMatch.id}/result`} className="text-link">
+                查看本场数据 →
+              </Link>
+            </>
+          ) : (
+            <div className="empty">暂无已结束赛事</div>
+          )}
         </section>
       </div>
     </LeagueShell>
