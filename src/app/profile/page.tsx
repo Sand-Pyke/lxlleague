@@ -1,111 +1,83 @@
 "use client";
 
-import { useState } from "react";
-import { LeagueShell } from "@/components/league-shell";
-import { matches, players } from "@/lib/data";
+import { LoginOutlined, LogoutOutlined, UserAddOutlined, UserOutlined } from "@ant-design/icons";
+import { Avatar, Button, Card, Empty, Space, Spin, Typography } from "antd";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { LeagueShell } from "@/components/app-shell";
+import { players } from "@/lib/data";
+
+type CurrentUser = { login: boolean; username?: string };
 
 export default function ProfilePage() {
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState("");
+  const [user, setUser] = useState<CurrentUser | null>(null);
   const player = players[0];
 
-  if (!player) {
-    return (
-      <LeagueShell>
-        <section className="page-title">
-          <p>SUMMONER PROFILE</p>
-          <h1>个人主页</h1>
-          <span>登录并创建个人资料后，即可查看赛事记录与个人数据。</span>
-        </section>
-        <div className="empty">暂无个人资料</div>
-      </LeagueShell>
-    );
+  useEffect(() => {
+    fetch("/api/current_user")
+      .then((response) => response.json())
+      .then(setUser)
+      .catch(() => setUser({ login: false }));
+  }, []);
+
+  async function logout() {
+    await fetch("/api/logout", { method: "POST" });
+    setUser({ login: false });
   }
 
   return (
     <LeagueShell>
-      <section className="profile-hero">
-        <div className="profile-glow" />
-        <img src={player.avatar} alt="个人头像" />
-        <div>
-          <p>SUMMONER PROFILE</p>
-          {editing ? (
-            <input value={name} onChange={(event) => setName(event.target.value)} autoFocus />
-          ) : (
-            <h1>{name || player.name}</h1>
-          )}
-          <span>
-            {player.gameName} · {player.rank}
-          </span>
-          <p className="profile-bio">{player.bio}</p>
-        </div>
-        <button className="button ghost" onClick={() => setEditing(!editing)}>
-          {editing ? "保存资料" : "编辑资料"}
-        </button>
+      <section className="page-title">
+        <Typography.Text type="secondary">SUMMONER PROFILE</Typography.Text>
+        <Typography.Title>个人主页</Typography.Title>
+        <Typography.Paragraph>管理个人资料、查看比赛记录并追踪你的赛场表现。</Typography.Paragraph>
       </section>
-
-      <section className="profile-stats">
-        <div>
-          <b>{player.wins}</b>
-          <span>总胜场</span>
+      {!user ? (
+        <div className="loading-state">
+          <Spin size="large" />
         </div>
-        <div>
-          <b>{player.winRate}%</b>
-          <span>赛事胜率</span>
-        </div>
-        <div>
-          <b>{player.kda}</b>
-          <span>场均 KDA</span>
-        </div>
-        <div>
-          <b>{player.mvp}</b>
-          <span>MVP 次数</span>
-        </div>
-      </section>
-
-      <div className="profile-grid">
-        <section className="panel">
-          <div className="section-heading compact">
-            <div>
-              <p>MATCH HISTORY</p>
-              <h2>比赛记录</h2>
-            </div>
-          </div>
-          {matches.length ? (
-            matches.slice(0, 3).map((match) => (
-              <div className="history-row" key={match.id}>
-                <div>
-                  <b>{match.name}</b>
-                  <small>
-                    {match.date} · {match.bo}
-                  </small>
-                </div>
-                <strong>
-                  {match.teams[0]}{" "}
-                  <i>
-                    {match.score[0]} : {match.score[1]}
-                  </i>{" "}
-                  {match.teams[1]}
-                </strong>
-                <span className={match.status === "FINISHED" ? "win" : "pending"}>
-                  {match.status === "FINISHED" ? "已结束" : "进行中"}
-                </span>
-              </div>
-            ))
-          ) : (
-            <div className="empty">暂无比赛记录</div>
-          )}
-        </section>
-        <aside className="panel profile-side">
-          <p>POSITION</p>
-          <h2>{player.position}</h2>
-          <p>常用位置</p>
-          <hr />
-          <p>CONNECT</p>
-          <b>LSPL · 玩家认证</b>
-          <span className="verified">✓ 已认证</span>
-        </aside>
-      </div>
+      ) : player ? (
+        <Card className="antd-panel">
+          <Space direction="vertical" size="large">
+            <Avatar size={88} src={player.avatar} icon={<UserOutlined />} />
+            <Typography.Title level={3}>{player.name}</Typography.Title>
+            <Typography.Text type="secondary">
+              {player.gameName} · {player.rank}
+            </Typography.Text>
+            <Typography.Paragraph>{player.bio}</Typography.Paragraph>
+          </Space>
+        </Card>
+      ) : user.login ? (
+        <Card className="profile-empty-card">
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="你的召唤师资料尚未创建">
+            <Space direction="vertical">
+              <Avatar size={64} icon={<UserOutlined />} />
+              <Typography.Title level={4}>{user.username}</Typography.Title>
+              <Typography.Text type="secondary">
+                账号已登录，资料与赛事记录将在首次报名后显示。
+              </Typography.Text>
+              <Button danger icon={<LogoutOutlined />} onClick={logout}>
+                退出登录
+              </Button>
+            </Space>
+          </Empty>
+        </Card>
+      ) : (
+        <Card className="profile-empty-card">
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="登录后即可创建个人资料">
+            <Space>
+              <Link href="/login">
+                <Button type="primary" icon={<LoginOutlined />}>
+                  登录
+                </Button>
+              </Link>
+              <Link href="/register">
+                <Button icon={<UserAddOutlined />}>注册账号</Button>
+              </Link>
+            </Space>
+          </Empty>
+        </Card>
+      )}
     </LeagueShell>
   );
 }

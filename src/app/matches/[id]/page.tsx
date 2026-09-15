@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { LeagueShell, Status } from "@/components/league-shell";
+import { LeagueShell, Status } from "@/components/app-shell";
 import { getMatch, players } from "@/lib/data";
 
 export default async function MatchDetail({ params }: { params: Promise<{ id: string }> }) {

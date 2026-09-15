@@ -5,8 +5,9 @@
 ## 技术栈
 
 - Next.js 15、React 19、TypeScript
-- Next.js Route Handlers：`src/app/api/[...path]/route.ts`
-- 原生响应式 CSS
+- Next.js Route Handlers：`src/app/api`
+- Ant Design 6、`@ant-design/nextjs-registry`
+- 浅色 / 深色主题切换（保存在浏览器本地）
 - 原项目视觉资源：`public/assets`
 
 ## 快速开始
@@ -55,7 +56,14 @@ npm run build         # 类型检查和生产构建
 
 ```text
 src/app/             页面路由、全局样式与 API
-src/components/      导航壳、赛事卡片等可复用组件
+src/components/      导航壳、赛事卡片等跨页面复用组件
+src/server/          按领域组织的服务端业务与 API Handler
 src/lib/data.ts      数据类型与空数据访问边界
 public/assets/       原工程迁移的背景、英雄、装备和头像资源
 ```
+
+## 前端模块边界
+
+- `src/app`：唯一的前端路由与页面目录；每个 URL 的页面实现直接放在对应的 `page.tsx` 中。
+- `src/components`：只放跨页面复用的 UI，例如应用导航壳和赛事卡片。
+- `src/server`：按认证、赛事、首页、选手和用户等领域组织服务端逻辑；`src/app/api` 只保留原有 URL 的 Route Handler 映射。

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Match } from "@/lib/data";
-import { Status } from "./league-shell";
+import { Status } from "@/components/app-shell";
 
 export function MatchCard({ match }: { match: Match }) {
   const destination =

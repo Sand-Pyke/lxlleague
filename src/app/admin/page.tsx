@@ -1,46 +1,38 @@
-import { LeagueShell } from "@/components/league-shell";
+"use client";
+
+import { SafetyCertificateOutlined, TeamOutlined, TrophyOutlined } from "@ant-design/icons";
+import { Card, Col, Empty, Row, Statistic, Typography } from "antd";
+import { LeagueShell } from "@/components/app-shell";
 import { matches, players } from "@/lib/data";
 
 export default function AdminPage() {
   return (
     <LeagueShell>
       <section className="page-title">
-        <p>ADMIN CONSOLE</p>
-        <h1>赛事管理后台</h1>
-        <span>管理赛事、报名、选手与对局赛果。</span>
+        <Typography.Text type="secondary">ADMIN CONSOLE</Typography.Text>
+        <Typography.Title>赛事管理后台</Typography.Title>
+        <Typography.Paragraph>统一管理赛事、报名、选手与对局赛果。</Typography.Paragraph>
       </section>
-      <div className="admin-grid">
-        <section className="panel">
-          <h2>赛事列表</h2>
-          {matches.map((m) => (
-            <div className="admin-row" key={m.id}>
-              <div>
-                <b>{m.name}</b>
-                <small>
-                  {m.date} · {m.bo}
-                </small>
-              </div>
-              <span>{m.status}</span>
-              <button>编辑</button>
-            </div>
-          ))}
-        </section>
-        <section className="panel">
-          <h2>用户列表</h2>
-          {players.slice(0, 6).map((p) => (
-            <div className="admin-row" key={p.id}>
-              <div>
-                <b>{p.name}</b>
-                <small>
-                  {p.position} · {p.rank}
-                </small>
-              </div>
-              <span>正常</span>
-              <button>管理</button>
-            </div>
-          ))}
-        </section>
-      </div>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} md={8}>
+          <Card className="antd-panel">
+            <Statistic title="赛事总数" value={matches.length} prefix={<TrophyOutlined />} />
+          </Card>
+        </Col>
+        <Col xs={24} md={8}>
+          <Card className="antd-panel">
+            <Statistic title="选手总数" value={players.length} prefix={<TeamOutlined />} />
+          </Card>
+        </Col>
+        <Col xs={24} md={8}>
+          <Card className="antd-panel">
+            <Statistic title="管理状态" value="正常" prefix={<SafetyCertificateOutlined />} />
+          </Card>
+        </Col>
+      </Row>
+      <Card className="antd-panel admin-empty-card">
+        <Empty description="暂无可管理的赛事或选手数据" />
+      </Card>
     </LeagueShell>
   );
 }
