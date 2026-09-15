@@ -1,39 +1,52 @@
-# lol-champion
+# LSPL 峡谷冠军联赛
 
-#### 介绍
-{**以下是 Gitee 平台说明，您可以替换此简介**
-Gitee 是 OSCHINA 推出的基于 Git 的代码托管平台（同时支持 SVN）。专为开发者提供稳定、高效、安全的云端软件开发协作平台
-无论是个人、团队、或是企业，都能够用 Gitee 实现代码托管、项目管理、协作开发。企业项目请看 [https://gitee.com/enterprises](https://gitee.com/enterprises)}
+基于 Next.js App Router 重构的全栈赛事平台。原有 HTML/JavaScript 页面已拆分为可维护的 Next.js 路由、React 组件与 Route Handlers；保留了暗色电竞视觉、赛事中心、选手、排行、个人中心、赛事详情、对阵、赛果及管理后台页面。
 
-#### 软件架构
-软件架构说明
+## 技术栈
 
+- Next.js 15、React 19、TypeScript
+- Next.js Route Handlers（`src/app/api/[...path]/route.ts`）提供同源 JSON API
+- 原生响应式 CSS；原项目背景、英雄、装备与头像资源位于 `public/assets`
 
-#### 安装教程
+## 快速开始
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+```bash
+npm install
+npm run dev
+```
 
-#### 使用说明
+打开 `http://localhost:3000`。生产构建与启动：
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+```bash
+npm run build
+npm run start
+```
 
-#### 参与贡献
+## 路由
 
-1.  Fork 本仓库
-2.  新建 Feat_xxx 分支
-3.  提交代码
-4.  新建 Pull Request
+| 页面 | 路径 |
+| --- | --- |
+| 首页 | `/` |
+| 比赛中心 | `/matches` |
+| 选手中心 | `/players` |
+| 排行榜 | `/rankings` |
+| 个人主页 | `/profile` |
+| 赛事详情 | `/matches/:id` |
+| 阵容对位 | `/matches/:id/lineup` |
+| 赛果详情 | `/matches/:id/result` |
+| 管理后台 | `/admin` |
 
+## API
 
-#### 特技
+已兼容核心读取接口：`/api/current_user`、`/api/match/list`、`/api/players`、`/api/home/board_v2`、`/api/match/detail/:id`、`/api/match/result/:id`、`/api/match/lineup/:id` 与用户资料接口。登录、注册、报名等写接口由 Next.js API 路由处理，并通过 Cookie 保存演示登录态。
 
-1.  使用 Readme\_XXX.md 来支持不同的语言，例如 Readme\_en.md, Readme\_zh.md
-2.  Gitee 官方博客 [blog.gitee.com](https://blog.gitee.com)
-3.  你可以 [https://gitee.com/explore](https://gitee.com/explore) 这个地址来了解 Gitee 上的优秀开源项目
-4.  [GVP](https://gitee.com/gvp) 全称是 Gitee 最有价值开源项目，是综合评定出的优秀开源项目
-5.  Gitee 官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
-6.  Gitee 封面人物是一档用来展示 Gitee 会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+## 目录说明
+
+```text
+src/app/             页面路由、全局样式与 API
+src/components/      导航壳、赛事卡片等可复用组件
+src/lib/data.ts      联赛演示数据与类型
+public/assets/       从原工程迁移的静态视觉资源
+```
+
+当前数据层为便于本地预览的内存演示数据。接入生产环境时，可将 `src/lib/data.ts` 替换为 Prisma、Drizzle 或其他数据库访问层，而页面与 API 契约保持不变。
