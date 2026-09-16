@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LeagueShell, Status } from "@/components/app-shell";
 import { MatchSignup } from "@/components/match-signup";
+import { RankLabel } from "@/components/rank-label";
 import { getMatchPageData } from "@/server/matches";
 
 export const dynamic = "force-dynamic";
@@ -89,12 +90,14 @@ export default async function MatchDetail({ params }: { params: Promise<{ id: st
           {players.length === 0 && <span>暂无选手报名</span>}
           {players.map((player) => (
             <div key={player.id}>
-              <img src={player.avatar} alt="" />
+              <img src={player.avatar || undefined} alt="" />
               <span>
                 <b>{player.name}</b>
                 <small>{player.teamPosition || player.position}</small>
               </span>
-              <em>{player.rank}</em>
+              <em>
+                <RankLabel rank={player.rank} fallback="未定段" />
+              </em>
             </div>
           ))}
         </aside>

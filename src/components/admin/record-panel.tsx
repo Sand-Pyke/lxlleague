@@ -554,7 +554,7 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
   ];
 
   return (
-    <Space direction="vertical" size={12} style={{ width: "100%" }}>
+    <Space orientation="vertical" size={12} style={{ width: "100%" }}>
       <datalist id="champion-options">
         {championOptions.map((name) => (
           <option key={name} value={name} />
@@ -575,7 +575,7 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
           </Button>
         }
       >
-        {error ? <Alert type="error" showIcon message={error} style={{ marginBottom: 12 }} /> : null}
+        {error ? <Alert type="error" showIcon title={error} style={{ marginBottom: 12 }} /> : null}
         <Space wrap style={{ marginBottom: 12 }}>
           <span>
             局号{" "}
@@ -712,7 +712,7 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
         }}
       >
         {editDraft ? (
-          <Space direction="vertical" size={10} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={10} style={{ width: "100%" }}>
             <Space wrap>
               <Select
                 style={{ width: 200 }}
@@ -794,11 +794,11 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
                 </span>
               ))}
             </Space>
-            <Space direction="vertical" size={6} style={{ width: "100%" }}>
+            <Space orientation="vertical" size={6} style={{ width: "100%" }}>
               <Typography.Text type="secondary">装备（最多 6 件，可填名称或 id）</Typography.Text>
               <Space wrap size={6}>
                 {itemSlotValues(editDraft.items).map((slot, index) => (
-                  <Space direction="vertical" size={2} key={`slot-${index}`} align="center">
+                  <Space orientation="vertical" size={2} key={`slot-${index}`} align="center">
                     <Input
                       style={{ width: 130 }}
                       list="item-options"

@@ -44,7 +44,9 @@ const asDate = (value: unknown) => {
 };
 
 export function normalizeResult(value: unknown): "win" | "lose" {
-  const text = String(value ?? "").trim().toLowerCase();
+  const text = String(value ?? "")
+    .trim()
+    .toLowerCase();
   return ["win", "胜利", "胜", "1", "true"].includes(text) ? "win" : "lose";
 }
 
@@ -164,7 +166,9 @@ export async function batchAddRecords(matchId: number, rows: unknown[]) {
 
     // 管理员录入的位置为权威数据，直接覆盖报名记录的位置槽
     if (matchId > 0) {
-      const teamPosition = String(row.team_pos ?? "").trim().toUpperCase();
+      const teamPosition = String(row.team_pos ?? "")
+        .trim()
+        .toUpperCase();
       if (["TOP", "JUG", "MID", "ADC", "SUP", "无"].includes(teamPosition)) {
         await prisma.matchSignup.updateMany({
           where: { matchId, userId },
@@ -330,7 +334,10 @@ export async function gameDetail(matchId: number, gameNo: number) {
   };
 }
 
-type RankedRecord = Pick<MatchGameRecord, "champion" | "result" | "kills" | "deaths" | "assists" | "isMvp" | "isSvp" | "teamRank">;
+type RankedRecord = Pick<
+  MatchGameRecord,
+  "champion" | "result" | "kills" | "deaths" | "assists" | "isMvp" | "isSvp" | "teamRank"
+>;
 
 export type PlayerStats = {
   games: number;
@@ -376,7 +383,10 @@ export function summarize(records: RankedRecord[]): PlayerStats {
   }
   const hero = [...championCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
 
-  const points = Math.max(0, wins * 10 - losses * 5 + mvp * 8 + svp * 5 + teamChampion * 30 + runnerup * 15);
+  const points = Math.max(
+    0,
+    wins * 10 - losses * 5 + mvp * 8 + svp * 5 + teamChampion * 30 + runnerup * 15,
+  );
 
   return {
     games,
@@ -401,7 +411,9 @@ export function summarize(records: RankedRecord[]): PlayerStats {
   };
 }
 
-type ProfileWithUser = PlayerProfile & { user: Pick<User, "username" | "kookName" | "backgroundImage"> };
+type ProfileWithUser = PlayerProfile & {
+  user: Pick<User, "username" | "kookName" | "backgroundImage">;
+};
 
 export function toPlayer(profile: ProfileWithUser, records: RankedRecord[]) {
   // records 需按时间倒序传入，用于取「最近 10 场」序列。
@@ -459,9 +471,12 @@ export async function listPlayerCards() {
     byUser.set(record.userId, bucket);
   }
 
-  return profiles
-    .map((profile) => toPlayer(profile, byUser.get(profile.userId) ?? []))
-    .sort((a, b) => b.points - a.points || b.wins - a.wins || a.id - b.id);
+  return (
+    profiles
+      .map((profile) => toPlayer(profile, byUser.get(profile.userId) ?? []))
+      // 榜单排序：积分优先，同积分比胜率，同胜率比 KDA；最后用 id 兜底保证顺序稳定。
+      .sort((a, b) => b.points - a.points || b.winRate - a.winRate || b.kda - a.kda || a.id - b.id)
+  );
 }
 
 export async function playerCardByUserId(userId: number) {
@@ -499,9 +514,16 @@ export async function profileOverview(userId: number, includeAdmin = false) {
   const names = new Map(matches.map((match) => [match.id, match.name]));
 
   // 参战率 = (击杀+助攻) / 同场次同局同队的击杀总和，上限 100%（与赛果页口径一致）。
-  const scopeKey = (row: { matchId: number | null; roundNo: number; gameNo: number; teamId: number | null }) =>
-    `${row.matchId ?? 0}-${row.roundNo}-${row.gameNo}-${row.teamId ?? 0}`;
-  const scopes = new Map<string, { matchId: number; roundNo: number; gameNo: number; teamId: number }>();
+  const scopeKey = (row: {
+    matchId: number | null;
+    roundNo: number;
+    gameNo: number;
+    teamId: number | null;
+  }) => `${row.matchId ?? 0}-${row.roundNo}-${row.gameNo}-${row.teamId ?? 0}`;
+  const scopes = new Map<
+    string,
+    { matchId: number; roundNo: number; gameNo: number; teamId: number }
+  >();
   for (const record of records) {
     if (record.matchId === null || record.teamId === null) continue;
     scopes.set(scopeKey(record), {
@@ -567,7 +589,9 @@ export async function profileOverview(userId: number, includeAdmin = false) {
       kills: record.kills,
       deaths: record.deaths,
       assists: record.assists,
-      kda: record.deaths ? round((record.kills + record.assists) / record.deaths, 2) : record.kills + record.assists,
+      kda: record.deaths
+        ? round((record.kills + record.assists) / record.deaths, 2)
+        : record.kills + record.assists,
       played_at: record.playedAt ? record.playedAt.toISOString() : null,
       game_no: record.gameNo,
       round_no: record.roundNo,

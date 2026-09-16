@@ -14,21 +14,27 @@ import {
   Spin,
   Table,
   Tag,
-  Typography,
 } from "antd";
 import type { TableColumnsType } from "antd";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { LeagueShell } from "@/components/app-shell";
+import { RankLabel } from "@/components/rank-label";
 import { POSITION_OPTIONS, RANKS, positionText } from "@/lib/admin-options";
 import type { Player } from "@/lib/data";
 import { championIcon } from "@/lib/game-assets";
 
-/** 段位筛选：与旧选手页一致（空段位归到「未设置」）。 */
-const RANK_FILTER_OPTIONS = RANKS.filter((rank) => rank !== "").map((rank) => ({
-  value: rank || "none",
-  label: rank || "未设置",
-}));
+/**
+ * 段位筛选：与旧选手页一致，外形与其它筛选下拉保持一致。
+ * 「全部段位」置顶，其余按 RANKS 词表（高段位在上）列出，选项带段位图标。
+ */
+const RANK_FILTER_OPTIONS = [
+  { value: "all", label: "全部段位" },
+  ...RANKS.filter((rank) => rank !== "").map((rank) => ({
+    value: rank,
+    label: <RankLabel rank={rank} />,
+  })),
+];
 
 const GAME_FILTER_OPTIONS = [
   { value: "all", label: "全部场次" },
@@ -66,7 +72,10 @@ const resultDots = (recent: string) =>
     .split(" ")
     .filter(Boolean)
     .map((result, index) => (
-      <span key={index} className={`result-dot ${result === "W" ? "result-dot--win" : "result-dot--loss"}`}>
+      <span
+        key={index}
+        className={`result-dot ${result === "W" ? "result-dot--win" : "result-dot--loss"}`}
+      >
         {result}
       </span>
     ));
@@ -75,7 +84,11 @@ function HeroCell({ player }: { player: Player }) {
   const icon = championIcon(player.hero);
   return (
     <span className="players-hero">
-      {icon ? <img src={icon} alt={player.hero} loading="lazy" /> : <span className="players-hero-empty" />}
+      {icon ? (
+        <img src={icon} alt={player.hero} loading="lazy" />
+      ) : (
+        <span className="players-hero-empty" />
+      )}
       <span>{player.hero || "--"}</span>
     </span>
   );
@@ -113,7 +126,9 @@ export default function PlayersPage() {
         (player.kookName ?? "").toLowerCase().includes(keyword)
       );
     });
-    return filtered.sort((a, b) => (filters.points === "asc" ? a.points - b.points : b.points - a.points));
+    return filtered.sort((a, b) =>
+      filters.points === "asc" ? a.points - b.points : b.points - a.points,
+    );
   }, [players, filters]);
 
   const columns: TableColumnsType<Player> = [
@@ -122,7 +137,7 @@ export default function PlayersPage() {
       key: "player",
       render: (_, player) => (
         <Link className="table-player" href={`/profile?uid=${player.id}`}>
-          <Avatar src={player.avatar} icon={<TeamOutlined />} />
+          <Avatar src={player.avatar || undefined} icon={<TeamOutlined />} />
           <span>
             <b>{player.name}</b>
             <small>{player.gameName || player.username}</small>
@@ -130,8 +145,18 @@ export default function PlayersPage() {
         </Link>
       ),
     },
-    { title: "位置", key: "position", width: 92, render: (_, player) => positionText(player.position) },
-    { title: "段位", key: "rank", width: 92, render: (_, player) => player.rank || "未设置" },
+    {
+      title: "位置",
+      key: "position",
+      width: 92,
+      render: (_, player) => positionText(player.position),
+    },
+    {
+      title: "段位",
+      key: "rank",
+      width: 108,
+      render: (_, player) => <RankLabel rank={player.rank} />,
+    },
     { title: "常用英雄", key: "hero", render: (_, player) => <HeroCell player={player} /> },
     { title: "胜率", key: "winRate", width: 82, render: (_, player) => `${player.winRate}%` },
     { title: "场次", dataIndex: "games", key: "games", width: 74 },
@@ -142,14 +167,10 @@ export default function PlayersPage() {
 
   return (
     <LeagueShell>
-      <section className="page-title">
-        <Typography.Text type="secondary">PLAYER CENTER</Typography.Text>
-        <Typography.Title>选手中心</Typography.Title>
-        <Typography.Paragraph>
-          LXL 注册选手 <b>{players.length}</b> 名 · 点击选手可查看个人主页
-        </Typography.Paragraph>
-      </section>
-
+      {/* 原先 page-title 区块里的人数信息，压成一行小字保留。 */}
+      <p className="players-hint">
+        LXL 注册选手 <b>{players.length}</b> 名 · 点击选手可查看个人主页
+      </p>
       <div className="players-toolbar">
         <Input
           allowClear
@@ -160,9 +181,18 @@ export default function PlayersPage() {
           onChange={(event) => setFilters({ ...filters, keyword: event.target.value })}
         />
         <div className="players-filters">
+          {/*
+            段位只有十来个，要求面板一次铺满、不要滚动条。
+            - virtual={false} 去掉虚拟滚动；
+            - classNames.popup.root 给弹层加类名，供 globals.css 覆盖内层的 256px 内联高度
+              （antd 6 已废弃 popupClassName，且移除了 listHeight）。
+          */}
           <Select
+            className="players-rank-select"
+            classNames={{ popup: { root: "rank-dropdown" } }}
             value={filters.rank}
-            options={[{ value: "all", label: "全部段位" }, ...RANK_FILTER_OPTIONS]}
+            options={RANK_FILTER_OPTIONS}
+            virtual={false}
             style={{ minWidth: 128 }}
             onChange={(rank) => setFilters({ ...filters, rank })}
           />
@@ -207,9 +237,9 @@ export default function PlayersPage() {
             {list.map((player) => (
               <Col key={player.id} xs={24} sm={12} lg={8} xl={6}>
                 <Link className="players-card-link" href={`/profile?uid=${player.id}`}>
-                  <Card className="player-antd-card" cover={<div className="player-antd-cover" />}>
+                  <Card className="player-antd-card">
                     <div className="players-card-head">
-                      <Avatar size={40} src={player.avatar} icon={<TeamOutlined />} />
+                      <Avatar size={40} src={player.avatar || undefined} icon={<TeamOutlined />} />
                       <div>
                         <b>{player.name}</b>
                         <small>{player.gameName || player.username}</small>
@@ -218,7 +248,9 @@ export default function PlayersPage() {
                     </div>
                     <div className="players-tags">
                       <Tag color="purple">{positionText(player.position)}</Tag>
-                      <Tag color="gold">{player.rank || "未设置"}</Tag>
+                      <Tag color="gold">
+                        <RankLabel rank={player.rank} />
+                      </Tag>
                     </div>
                     <div className="players-hero-row">
                       <span className="players-hero-label">常用英雄</span>

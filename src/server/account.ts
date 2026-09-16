@@ -4,7 +4,8 @@ import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isBackgroundFile, BACKGROUND_PREFIX } from "@/lib/backgrounds";
-import { getSessionUser } from "@/server/auth";
+import { RANKS, RANK_REVIEW_NOTE, normalizeRank } from "@/lib/admin-options";
+import { getSessionUser, isCoreAdminUsername } from "@/server/auth";
 
 /**
  * 选手自助资料端点（对应旧项目 app.py 里的 /api/user/* 与 /api/avatar/upload）。
@@ -33,7 +34,10 @@ async function jsonBody(request: NextRequest) {
  * 自助编辑与个人主页都按「资料行必须存在」处理，缺失时按账号名补一条。
  */
 export async function ensureProfile(userId: number) {
-  const existing = await prisma.playerProfile.findUnique({ where: { userId }, select: { id: true } });
+  const existing = await prisma.playerProfile.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
   if (existing) return;
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { username: true } });
   if (!user) return;
@@ -48,7 +52,8 @@ const text = (value: unknown) => (typeof value === "string" ? value : "");
 function isRealImage(buffer: Buffer) {
   const head = buffer.subarray(0, 16);
   if (head.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return true;
-  if (head.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return true;
+  if (head.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])))
+    return true;
   const ascii = (start: number, end: number) => head.subarray(start, end).toString("latin1");
   if (ascii(0, 6) === "GIF87a" || ascii(0, 6) === "GIF89a") return true;
   return ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP";
@@ -95,7 +100,10 @@ export async function changePassword(request: NextRequest) {
   const body = await jsonBody(request);
   const oldPassword = text(body.old_pwd);
   const newPassword = text(body.new_pwd);
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { passwordHash: true } });
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { passwordHash: true },
+  });
   if (!user || !(await bcrypt.compare(oldPassword, user.passwordHash))) {
     return message("原密码错误", 400);
   }
@@ -124,6 +132,42 @@ export async function updatePosition(request: NextRequest) {
     data: { mainPosition, subPosition },
   });
   return message("位置已更新");
+}
+
+/**
+ * 申请修改段位。
+ * 段位是注册时提交、审核通过后锁定的资料：本人不能直接改，
+ * 提交申请后账号重新进入待审核状态并带上「-修改段位」备注，
+ * 新段位先存进 pendingRank，等管理员通过后才真正写入资料。
+ */
+export async function requestRankChange(request: NextRequest) {
+  const userId = await currentUserId(request);
+  if (!userId) return message("请先登录", 401);
+  const raw = text((await jsonBody(request)).rank).trim();
+  if (!RANKS.includes(raw)) return message("段位不合法", 400);
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      username: true,
+      pendingRank: true,
+      profile: { select: { rank: true } },
+    },
+  });
+  if (!user) return message("用户不存在", 404);
+  if (isCoreAdminUsername(user.username)) return message("系统账号不支持修改段位", 400);
+
+  const next = normalizeRank(raw);
+  const current = user.profile?.rank ?? "";
+  if (next === current) return message("与当前段位相同，无需修改", 400);
+  if (user.pendingRank === next) return message("该段位已提交审核，请等待管理员处理", 400);
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { pendingRank: next, status: "PENDING", reviewNote: RANK_REVIEW_NOTE },
+  });
+  const label = (rank: string) => rank || "未设置";
+  return message(`已提交段位修改申请：${label(current)} → ${label(next)}，等待管理员审核`);
 }
 
 /** 个人简介保存（最多 300 字）。 */
@@ -197,7 +241,7 @@ export async function uploadAvatar(request: NextRequest) {
   return NextResponse.json({ msg: "头像已更新", avatar });
 }
 
-/** 选择白名单背景（兼容传文件名或完整路径）。 */
+/** 选择白名单背景（兼容传文件名或完整路径）。背景在全站生效，个人主页只是修改入口。 */
 export async function selectBackground(request: NextRequest) {
   const userId = await currentUserId(request);
   if (!userId) return message("请先登录", 401);
@@ -209,7 +253,7 @@ export async function selectBackground(request: NextRequest) {
   return NextResponse.json({ msg: "背景已更新", background: backgroundImage });
 }
 
-/** 自定义背景上传：一个用户只保留一张，仅本人主页使用。 */
+/** 自定义背景上传：一个用户只保留一张，全站生效（仅深色模式拉取）。 */
 export async function uploadBackground(request: NextRequest) {
   const userId = await currentUserId(request);
   if (!userId) return message("请先登录", 401);

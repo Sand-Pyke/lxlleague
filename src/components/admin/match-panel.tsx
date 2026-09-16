@@ -150,7 +150,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
       title: "赛事",
       key: "name",
       render: (_, match) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Typography.Text strong>{match.name}</Typography.Text>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {match.round} · {new Date(match.date).toLocaleDateString("zh-CN")}
@@ -236,7 +236,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
   ];
 
   return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+    <Space orientation="vertical" size={16} style={{ width: "100%" }}>
       <Card
         className="antd-panel"
         title="赛事管理"
@@ -261,7 +261,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
           </Space>
         }
       >
-        {error ? <Alert type="error" showIcon message={error} style={{ marginBottom: 12 }} /> : null}
+        {error ? <Alert type="error" showIcon title={error} style={{ marginBottom: 12 }} /> : null}
         <Space style={{ marginBottom: 12 }}>
           <Button
             type="primary"
@@ -312,7 +312,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
             </Button>
           }
         >
-          <Space direction="vertical" size={16} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={16} style={{ width: "100%" }}>
             <Space wrap>
               <Typography.Text type="secondary">基础信息</Typography.Text>
               <Button
@@ -494,7 +494,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
           });
         }}
       >
-        <Space direction="vertical" size={10} style={{ width: "100%" }}>
+        <Space orientation="vertical" size={10} style={{ width: "100%" }}>
           <Input
             placeholder="比赛名称"
             maxLength={100}
@@ -554,7 +554,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
         }}
       >
         {editForm ? (
-          <Space direction="vertical" size={10} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={10} style={{ width: "100%" }}>
             <Input
               placeholder="比赛名称"
               maxLength={100}
@@ -626,7 +626,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
           });
         }}
       >
-        <Space direction="vertical" size={10} style={{ width: "100%" }}>
+        <Space orientation="vertical" size={10} style={{ width: "100%" }}>
           <span>
             蓝队{" "}
             <Select
@@ -681,7 +681,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
           });
         }}
       >
-        <Space direction="vertical" size={10} style={{ width: "100%" }}>
+        <Space orientation="vertical" size={10} style={{ width: "100%" }}>
           <span>
             轮次{" "}
             <InputNumber

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LeagueShell } from "@/components/app-shell";
+import { RankLabel } from "@/components/rank-label";
 import { championIcon, itemAsset, itemIcon } from "@/lib/game-assets";
 import { getMatchResultData } from "@/server/matches";
 
@@ -41,8 +42,16 @@ export default async function Result({
       : (games[0]?.game_no ?? 1);
   const current = games.find((item) => item.game_no === shown);
   const groups = [
-    { key: "win", label: "胜方", rows: (current?.rows ?? []).filter((row) => row.result === "win") },
-    { key: "lose", label: "败方", rows: (current?.rows ?? []).filter((row) => row.result !== "win") },
+    {
+      key: "win",
+      label: "胜方",
+      rows: (current?.rows ?? []).filter((row) => row.result === "win"),
+    },
+    {
+      key: "lose",
+      label: "败方",
+      rows: (current?.rows ?? []).filter((row) => row.result !== "win"),
+    },
   ].map((group) => ({
     ...group,
     rows: [...group.rows].sort((a, b) => posRank(a.team_pos) - posRank(b.team_pos)),
@@ -119,7 +128,7 @@ export default async function Result({
                       </div>
                       <span>
                         <b>
-                          <img className="result-avatar" src={row.avatar} alt="" />
+                          <img className="result-avatar" src={row.avatar || undefined} alt="" />
                           {row.display_name || row.username}
                         </b>
                         <small>
@@ -127,7 +136,9 @@ export default async function Result({
                         </small>
                       </span>
                     </div>
-                    <span>{row.rank || "-"}</span>
+                    <span>
+                      <RankLabel rank={row.rank} fallback="-" />
+                    </span>
                     <span>
                       {row.kills} / {row.deaths} / {row.assists}
                     </span>
@@ -137,18 +148,20 @@ export default async function Result({
                     <span>{row.vision}</span>
                     <span className="result-items">
                       {row.items.length ? (
-                        row.items.slice(0, 6).map((item, index) =>
-                          itemIcon(item) ? (
-                            <img
-                              key={`${item}-${index}`}
-                              src={itemIcon(item)}
-                              alt=""
-                              title={itemAsset(item)?.name ?? item}
-                            />
-                          ) : (
-                            <i className="item-missing" key={`${item}-${index}`} title={item} />
-                          ),
-                        )
+                        row.items
+                          .slice(0, 6)
+                          .map((item, index) =>
+                            itemIcon(item) ? (
+                              <img
+                                key={`${item}-${index}`}
+                                src={itemIcon(item)}
+                                alt=""
+                                title={itemAsset(item)?.name ?? item}
+                              />
+                            ) : (
+                              <i className="item-missing" key={`${item}-${index}`} title={item} />
+                            ),
+                          )
                       ) : (
                         <small>-</small>
                       )}

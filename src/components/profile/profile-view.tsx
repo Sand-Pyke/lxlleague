@@ -3,7 +3,6 @@
 import {
   CameraOutlined,
   LoginOutlined,
-  LogoutOutlined,
   PictureOutlined,
   UserAddOutlined,
   UserOutlined,
@@ -20,6 +19,7 @@ import {
   Spin,
   Table,
   Tag,
+  Tooltip,
   Typography,
   Upload,
   message,
@@ -27,10 +27,12 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { errorText, getJson, postJson, successText } from "@/components/admin/api-client";
 import { LeagueShell } from "@/components/app-shell";
-import { POSITION_OPTIONS, positionText } from "@/lib/admin-options";
+import { RankLabel } from "@/components/rank-label";
+import { useThemeMode } from "@/components/theme-provider";
+import { POSITION_OPTIONS, RANK_OPTIONS, positionText } from "@/lib/admin-options";
 import { BACKGROUND_OPTIONS } from "@/lib/backgrounds";
 import { championIcon, itemIcon } from "@/lib/game-assets";
 
@@ -72,6 +74,10 @@ type ProfileUser = {
   kookName: string;
   background: string;
   is_admin: boolean;
+  status: string;
+  /** 待审核的新段位；非空表示有一笔段位修改申请在排队。 */
+  pending_rank: string;
+  review_note: string;
   mvp: number;
   svp: number;
   points: number;
@@ -92,6 +98,7 @@ type ProfileStats = {
 
 type ProfilePayload = {
   isSelf: boolean;
+  is_core_admin: boolean;
   user: ProfileUser;
   stats: ProfileStats;
   heroes: HeroStat[];
@@ -100,7 +107,7 @@ type ProfilePayload = {
   match_history: HistoryRow[];
 };
 
-type EditKind = "bio" | "kook" | "game" | "account" | "pwd" | "pos" | "bg";
+type EditKind = "bio" | "kook" | "game" | "account" | "pwd" | "pos" | "rank" | "bg";
 
 const EDIT_TITLE: Record<EditKind, string> = {
   bio: "编辑个人简介",
@@ -109,6 +116,7 @@ const EDIT_TITLE: Record<EditKind, string> = {
   account: "修改账户ID",
   pwd: "修改密码",
   pos: "设置位置",
+  rank: "修改段位",
   bg: "选择背景图",
 };
 
@@ -121,6 +129,7 @@ const emptyDraft = {
   newPwd: "",
   mainPos: "",
   subPos: "无",
+  rank: "",
   bg: "",
 };
 
@@ -138,9 +147,12 @@ export function ProfileView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const uid = searchParams.get("uid") ?? "";
+  const { mode } = useThemeMode();
   const [messageApi, contextHolder] = message.useMessage();
   const [payload, setPayload] = useState<ProfilePayload | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "anon" | "missing" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "ready" | "anon" | "missing" | "error">(
+    "loading",
+  );
   const [errorMessage, setErrorMessage] = useState("");
   const [editKind, setEditKind] = useState<EditKind | null>(null);
   const [draft, setDraft] = useState(emptyDraft);
@@ -171,6 +183,11 @@ export function ProfileView() {
     void load();
   }, [load]);
 
+  // 自定义背景仅在深色模式下可用；切回浅色时关掉可能还开着的背景弹窗。
+  useEffect(() => {
+    if (mode !== "dark") setEditKind((kind) => (kind === "bg" ? null : kind));
+  }, [mode]);
+
   function openEdit(kind: EditKind) {
     if (!payload) return;
     setDraft({
@@ -180,8 +197,11 @@ export function ProfileView() {
       accountName: payload.user.username ?? "",
       oldPwd: "",
       newPwd: "",
-      mainPos: POSITION_OPTIONS.includes(payload.user.mainPosition) ? payload.user.mainPosition : "",
+      mainPos: POSITION_OPTIONS.includes(payload.user.mainPosition)
+        ? payload.user.mainPosition
+        : "",
       subPos: POSITION_OPTIONS.includes(payload.user.subPosition) ? payload.user.subPosition : "无",
+      rank: payload.user.rank ?? "",
       bg: payload.user.background.replace("/assets/bgs/", ""),
     });
     setEditKind(kind);
@@ -191,10 +211,13 @@ export function ProfileView() {
     const form = new FormData();
     form.append(kind, file);
     try {
-      const response = await fetch(kind === "avatar" ? "/api/avatar/upload" : "/api/user/bg/upload", {
-        method: "POST",
-        body: form,
-      });
+      const response = await fetch(
+        kind === "avatar" ? "/api/avatar/upload" : "/api/user/bg/upload",
+        {
+          method: "POST",
+          body: form,
+        },
+      );
       const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
       if (!response.ok) {
         messageApi.error(typeof data.msg === "string" ? data.msg : "上传失败");
@@ -203,6 +226,8 @@ export function ProfileView() {
       messageApi.success(kind === "avatar" ? "头像已更新" : "背景已更新");
       setEditKind(null);
       await load();
+      // 顶栏头像与全站背景都由根布局在服务端注入，上传后需刷新服务端组件才会同步。
+      if (kind === "avatar" || kind === "bg") router.refresh();
     } catch {
       messageApi.error("上传失败，请稍后重试");
     }
@@ -218,6 +243,10 @@ export function ProfileView() {
       messageApi.error("请输入新密码");
       return;
     }
+    if (editKind === "rank" && !draft.rank) {
+      messageApi.error("请选择段位");
+      return;
+    }
     setSaving(true);
     try {
       const request: Record<EditKind, [string, Record<string, unknown>]> = {
@@ -227,6 +256,8 @@ export function ProfileView() {
         account: ["/api/user/change_username", { username: draft.accountName }],
         pwd: ["/api/user/change_pwd", { old_pwd: draft.oldPwd, new_pwd: draft.newPwd }],
         pos: ["/api/user/update_pos", { main_pos: draft.mainPos, sub_pos: draft.subPos || "无" }],
+        // 段位不能直接改：提交后账号会重新进入待审核状态。
+        rank: ["/api/user/rank", { rank: draft.rank }],
         bg: ["/api/user/bg", { bg: draft.bg }],
       };
       const [url, body] = request[editKind];
@@ -234,6 +265,8 @@ export function ProfileView() {
       messageApi.success(successText(data, "已保存"));
       setEditKind(null);
       await load();
+      // 顶栏显示账户ID、全站背景都来自根布局的服务端注入，改完需刷新才会同步。
+      if (editKind === "account" || editKind === "bg") router.refresh();
     } catch (error) {
       messageApi.error(errorText(error));
     } finally {
@@ -241,15 +274,13 @@ export function ProfileView() {
     }
   }
 
-  async function logout() {
-    await fetch("/api/logout", { method: "POST" }).catch(() => undefined);
-    router.push("/");
-  }
-
   const user = payload?.user;
   const stats = payload?.stats;
   const history = payload?.match_history ?? [];
   const self = Boolean(payload?.isSelf);
+  // 核心管理员（admin）是系统账号而非选手：不展示段位/位置/排名与各项数据面板，
+  // 仅保留档案卡与「个人简介」里的账户设置。
+  const coreAdmin = Boolean(payload?.is_core_admin);
 
   const columns: ColumnsType<HistoryRow> = [
     {
@@ -301,7 +332,11 @@ export function ProfileView() {
       width: 150,
       render: (value: number, row) => (
         <span className="prof-kda">
-          {row.kills} / <i>{row.deaths}</i> / {row.assists}
+          {/* 必须包一层元素：.prof-kda 是纵向 flex，直接写 "击杀 / <i>阵亡</i> / 助攻" 的话
+              斜杠与 <i> 会被当成多个匿名 flex 子项，各自占一行。 */}
+          <span>
+            {row.kills} / <i>{row.deaths}</i> / {row.assists}
+          </span>
           <small>{Number(value).toFixed(2)} KDA</small>
         </span>
       ),
@@ -336,12 +371,6 @@ export function ProfileView() {
   return (
     <LeagueShell>
       {contextHolder}
-      <section className="page-title">
-        <Typography.Text type="secondary">SUMMONER PROFILE</Typography.Text>
-        <Typography.Title>个人主页</Typography.Title>
-        <Typography.Paragraph>管理个人资料、查看比赛记录并追踪你的赛场表现。</Typography.Paragraph>
-      </section>
-
       {status === "loading" ? (
         <div className="loading-state">
           <Spin size="large" />
@@ -370,16 +399,13 @@ export function ProfileView() {
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={errorMessage} />
         </Card>
       ) : user && stats ? (
-        <div className="prof-page">
+        <div className={coreAdmin ? "prof-page prof-page--core-admin" : "prof-page"}>
+          {/* 自定义背景层已提到全站外壳（LeagueShell）里，这里不再重复渲染。 */}
           <section className="prof-hero">
-            {user.background ? (
-              <div className="prof-hero-bg" style={{ backgroundImage: `url("${user.background}")` }} />
-            ) : null}
             <div className="prof-hero-inner">
               <div className="prof-avatar-box">
-                <Avatar size={96} src={user.avatar || undefined} icon={<UserOutlined />} />
                 {self ? (
-                  <div className="prof-avatar-actions">
+                  <Tooltip title={user.avatar ? "点击更换头像" : "还没有头像，点击上传"}>
                     <Upload
                       accept="image/*"
                       showUploadList={false}
@@ -388,20 +414,43 @@ export function ProfileView() {
                         return false;
                       }}
                     >
-                      <a>
-                        <CameraOutlined /> 更换头像
-                      </a>
+                      <button type="button" className="prof-avatar-trigger" aria-label="更换头像">
+                        {user.avatar ? (
+                          <Avatar size={96} src={user.avatar} />
+                        ) : (
+                          <span className="prof-avatar-placeholder">
+                            <CameraOutlined />
+                            <small>点击上传头像</small>
+                          </span>
+                        )}
+                      </button>
                     </Upload>
-                    <a onClick={() => openEdit("bg")}>
-                      <PictureOutlined /> 选择背景
-                    </a>
+                  </Tooltip>
+                ) : user.avatar ? (
+                  <Avatar size={96} src={user.avatar} />
+                ) : (
+                  <span className="prof-avatar-placeholder">
+                    <UserOutlined />
+                  </span>
+                )}
+                {self ? (
+                  <div className="prof-avatar-actions">
+                    {mode === "dark" ? (
+                      <a onClick={() => openEdit("bg")}>
+                        <PictureOutlined /> 选择背景
+                      </a>
+                    ) : (
+                      <span className="prof-avatar-note">切到深色模式可设置背景</span>
+                    )}
                   </div>
                 ) : null}
               </div>
               <div className="prof-identity">
                 <h1>{user.name}</h1>
                 <div className="prof-meta">
-                  <span className="prof-rank">{user.rank || "未定段"}</span>
+                  <span className="prof-rank">
+                    <RankLabel rank={user.rank} fallback="未定段" />
+                  </span>
                   <Tag
                     className={self ? "prof-tag clickable" : "prof-tag"}
                     title={self ? "点击修改位置" : undefined}
@@ -421,7 +470,12 @@ export function ProfileView() {
                       {payload.heroes.map((hero) => {
                         const icon = championIcon(hero.champion);
                         return icon ? (
-                          <img key={hero.champion} src={icon} alt={hero.champion} title={hero.champion} />
+                          <img
+                            key={hero.champion}
+                            src={icon}
+                            alt={hero.champion}
+                            title={hero.champion}
+                          />
                         ) : null;
                       })}
                     </span>
@@ -430,23 +484,6 @@ export function ProfileView() {
                     LXL 第 <b>{payload?.ranking || "-"}</b> 位选手
                   </span>
                 </div>
-              </div>
-              <div className="prof-hero-side">
-                <Link href="/">
-                  <Button size="small">返回首页</Button>
-                </Link>
-                {self && user.is_admin ? (
-                  <Link href="/admin">
-                    <Button size="small" type="primary">
-                      管理后台
-                    </Button>
-                  </Link>
-                ) : null}
-                {self ? (
-                  <Button size="small" danger icon={<LogoutOutlined />} onClick={() => void logout()}>
-                    退出登录
-                  </Button>
-                ) : null}
               </div>
             </div>
           </section>
@@ -457,7 +494,7 @@ export function ProfileView() {
                 className="antd-panel"
                 title="个人简介"
                 extra={
-                  self ? (
+                  self && !coreAdmin ? (
                     <Button size="small" onClick={() => openEdit("bio")}>
                       编辑简介
                     </Button>
@@ -465,9 +502,10 @@ export function ProfileView() {
                 }
               >
                 <Typography.Paragraph className="prof-bio">
-                  {user.bio || "这个人很懒，什么都没有留下"}
+                  {coreAdmin ? "本页面王牌管理员" : user.bio || "这个人很懒，什么都没有留下"}
                 </Typography.Paragraph>
-                {self ? (
+                {/* 核心管理员是系统账号：不提供任何自助设置（账户、密码、段位等）。 */}
+                {self && !coreAdmin ? (
                   <div className="prof-settings">
                     <div className="prof-settings-title">我的资料设置</div>
                     {(
@@ -475,8 +513,22 @@ export function ProfileView() {
                         { label: "账户ID", value: user.username || "未设置", kind: "account" },
                         { label: "KOOK昵称", value: user.kookName || "未设置", kind: "kook" },
                         { label: "游戏ID", value: user.gameName || "未设置", kind: "game" },
+                        {
+                          label: "段位",
+                          value: (
+                            <>
+                              <RankLabel rank={user.rank} fallback="未设置" />
+                              {user.pending_rank ? (
+                                <Typography.Text type="warning" style={{ fontSize: 12 }}>
+                                  （审核中：{user.pending_rank}）
+                                </Typography.Text>
+                              ) : null}
+                            </>
+                          ),
+                          kind: "rank" as EditKind,
+                        },
                         { label: "登录密码", value: "••••••", kind: "pwd" },
-                      ] as Array<{ label: string; value: string; kind: EditKind }>
+                      ] as Array<{ label: string; value: ReactNode; kind: EditKind }>
                     ).map((row) => (
                       <div className="prof-settings-row" key={row.kind}>
                         <span>
@@ -494,25 +546,30 @@ export function ProfileView() {
                 ) : null}
               </Card>
 
-              <Card className="antd-panel" title="赛季数据">
-                <div className="prof-stats">
-                  {[
-                    { label: "比赛场次", value: stats.games, tone: "" },
-                    { label: "胜场", value: stats.wins, tone: "green" },
-                    { label: "负场", value: stats.losses, tone: "red" },
-                    { label: "胜率", value: `${stats.winRate}%`, tone: "gold" },
-                    { label: "KDA", value: stats.kda, tone: "cyan" },
-                    { label: "场均击杀", value: stats.avgKills, tone: "" },
-                    { label: "场均死亡", value: stats.avgDeaths, tone: "" },
-                    { label: "场均助攻", value: stats.avgAssists, tone: "" },
-                  ].map((item) => (
-                    <div className="prof-stat" key={item.label}>
-                      <b className={item.tone ? `prof-${item.tone}` : undefined}>{item.value}</b>
-                      <span>{item.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </Card>
+              {/* 核心管理员是系统账号而非选手：赛季数据整个不渲染。
+                  不用 CSS 隐藏，否则会撞上 .prof-main > .ant-card:last-child 的
+                  display: flex（特异性 0,3,0）盖掉隐藏规则（0,2,0）。 */}
+              {coreAdmin ? null : (
+                <Card className="antd-panel prof-stats-card" title="赛季数据">
+                  <div className="prof-stats">
+                    {[
+                      { label: "比赛场次", value: stats.games, tone: "" },
+                      { label: "胜场", value: stats.wins, tone: "green" },
+                      { label: "负场", value: stats.losses, tone: "red" },
+                      { label: "胜率", value: `${stats.winRate}%`, tone: "gold" },
+                      { label: "KDA", value: stats.kda, tone: "cyan" },
+                      { label: "场均击杀", value: stats.avgKills, tone: "" },
+                      { label: "场均死亡", value: stats.avgDeaths, tone: "" },
+                      { label: "场均助攻", value: stats.avgAssists, tone: "" },
+                    ].map((item) => (
+                      <div className="prof-stat" key={item.label}>
+                        <b className={item.tone ? `prof-${item.tone}` : undefined}>{item.value}</b>
+                        <span>{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
             </div>
 
             <div className="prof-side">
@@ -522,7 +579,11 @@ export function ProfileView() {
                     const icon = championIcon(hero.champion);
                     return (
                       <div className="prof-hero-row" key={hero.champion}>
-                        {icon ? <img src={icon} alt={hero.champion} /> : <b>{hero.champion.slice(0, 1)}</b>}
+                        {icon ? (
+                          <img src={icon} alt={hero.champion} />
+                        ) : (
+                          <b>{hero.champion.slice(0, 1)}</b>
+                        )}
                         <div>
                           <strong>{hero.champion}</strong>
                           <small>
@@ -545,7 +606,9 @@ export function ProfileView() {
               <Card className="antd-panel" title="荣誉">
                 {user.mvp || user.svp || user.teamChampion || user.runnerup ? (
                   <div className="prof-honors">
-                    {user.teamChampion ? <Tag color="gold">赛事冠军 × {user.teamChampion}</Tag> : null}
+                    {user.teamChampion ? (
+                      <Tag color="gold">赛事冠军 × {user.teamChampion}</Tag>
+                    ) : null}
                     {user.runnerup ? <Tag color="purple">赛事亚军 × {user.runnerup}</Tag> : null}
                     {user.mvp ? <Tag color="blue">MVP × {user.mvp}</Tag> : null}
                     {user.svp ? <Tag color="cyan">SVP × {user.svp}</Tag> : null}
@@ -578,7 +641,8 @@ export function ProfileView() {
                 onRow={(row) => ({
                   className: row.match_id ? "prof-history-row" : undefined,
                   onClick: () => {
-                    if (row.match_id) router.push(`/matches/${row.match_id}/result?game=${row.game_no}`);
+                    if (row.match_id)
+                      router.push(`/matches/${row.match_id}/result?game=${row.game_no}`);
                   },
                 })}
               />
@@ -626,7 +690,7 @@ export function ProfileView() {
           />
         ) : null}
         {editKind === "account" ? (
-          <Space direction="vertical" size={6} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={6} style={{ width: "100%" }}>
             <Input
               value={draft.accountName}
               maxLength={16}
@@ -637,7 +701,7 @@ export function ProfileView() {
           </Space>
         ) : null}
         {editKind === "pwd" ? (
-          <Space direction="vertical" size={8} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={8} style={{ width: "100%" }}>
             <Input.Password
               value={draft.oldPwd}
               placeholder="原密码"
@@ -650,8 +714,28 @@ export function ProfileView() {
             />
           </Space>
         ) : null}
+        {editKind === "rank" ? (
+          <Space orientation="vertical" size={10} style={{ width: "100%" }}>
+            <Select
+              style={{ width: "100%" }}
+              value={draft.rank || undefined}
+              placeholder="选择段位"
+              virtual={false}
+              classNames={{ popup: { root: "rank-dropdown" } }}
+              options={RANK_OPTIONS.map((option) => ({
+                value: option.value,
+                label: <RankLabel rank={option.value} fallback="未设置" />,
+              }))}
+              onChange={(value) => setDraft({ ...draft, rank: value })}
+            />
+            <Typography.Text type="secondary">
+              段位在注册时提交、审核通过后不可自行修改。提交修改申请后账号会回到「待审核」，
+              需等管理员通过后新段位才生效；审核期间请勿退出登录（退出后无法重新登录）。
+            </Typography.Text>
+          </Space>
+        ) : null}
         {editKind === "pos" ? (
-          <Space direction="vertical" size={10} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={10} style={{ width: "100%" }}>
             <div>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                 主位置
@@ -689,7 +773,7 @@ export function ProfileView() {
           </Space>
         ) : null}
         {editKind === "bg" ? (
-          <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={12} style={{ width: "100%" }}>
             <div className="prof-bg-grid">
               {BACKGROUND_OPTIONS.map((option) => (
                 <button

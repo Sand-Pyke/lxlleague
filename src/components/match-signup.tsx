@@ -110,7 +110,7 @@ export function MatchSignup({ matchId, signable, loggedIn, signed, defaultMain, 
         onOk={submit}
         onCancel={() => setOpen(false)}
       >
-        <Space direction="vertical" size={0} className="signup-form">
+        <Space orientation="vertical" size={0} className="signup-form">
           <Typography.Text className="signup-hint" type="secondary">
             将使用你个人主页设置的昵称报名
           </Typography.Text>

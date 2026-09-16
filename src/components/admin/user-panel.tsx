@@ -7,7 +7,6 @@ import {
   Card,
   Empty,
   Input,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -20,20 +19,24 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  RANK_OPTIONS,
   REVIEW_STATUS_COLOR,
   REVIEW_STATUS_LABEL,
   REVIEW_STATUSES,
+  isUnsetPosition,
   positionText,
   type ReviewStatus,
 } from "@/lib/admin-options";
-import { asArray, deleteJson, errorText, getJson, postJson, successText } from "./api-client";
+import { asArray, errorText, getJson, postJson, successText } from "./api-client";
 
 type AdminUser = {
   id: number;
   username: string;
   isAdmin: boolean;
   status: ReviewStatus;
+  /** 审核备注，如「-修改段位」。 */
+  reviewNote: string;
+  /** 待审核的新段位；非空表示有一笔段位修改申请在排队。 */
+  pendingRank: string;
   kookName: string | null;
   createdAt: string;
   profile: {
@@ -45,20 +48,6 @@ type AdminUser = {
   } | null;
 };
 
-type UserRecord = {
-  id: number;
-  match_id: number | null;
-  match_name: string;
-  game_no: number;
-  champion: string;
-  result: string;
-  kills: number;
-  deaths: number;
-  assists: number;
-  is_mvp: boolean;
-  played_at: string;
-};
-
 const formatTime = (value: string) => new Date(value).toLocaleString("zh-CN", { hour12: false });
 
 export function UserPanel({ onChanged }: { onChanged?: () => void }) {
@@ -68,14 +57,6 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState<ReviewStatus | "ALL">("ALL");
   const [busyId, setBusyId] = useState<number | null>(null);
-
-  const [gameNameTarget, setGameNameTarget] = useState<AdminUser | null>(null);
-  const [gameNameValue, setGameNameValue] = useState("");
-  const [passwordTarget, setPasswordTarget] = useState<AdminUser | null>(null);
-  const [passwordValue, setPasswordValue] = useState("");
-  const [recordsTarget, setRecordsTarget] = useState<AdminUser | null>(null);
-  const [records, setRecords] = useState<UserRecord[]>([]);
-  const [recordsLoading, setRecordsLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -126,29 +107,16 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
 
   const pendingCount = users.filter((user) => user.status === "PENDING").length;
 
-  async function openRecords(user: AdminUser) {
-    setRecordsTarget(user);
-    setRecords([]);
-    setRecordsLoading(true);
-    try {
-      const data = await getJson(`/api/admin/users/records/${user.id}`);
-      setRecords(asArray<UserRecord>(data.records));
-    } catch (requestError) {
-      message.error(errorText(requestError, "无法读取战绩"));
-    } finally {
-      setRecordsLoading(false);
-    }
-  }
-
   const columns: ColumnsType<AdminUser> = [
     {
       title: "账号",
       key: "account",
       render: (_, user) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Typography.Text strong>{user.username}</Typography.Text>
+          {/* KOOK 由用户自己在个人中心维护，后台不再提示未填写。 */}
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {user.isAdmin ? "管理员" : "普通用户"} · KOOK {user.kookName || "未填写"}
+            {user.isAdmin ? "管理员" : "普通用户"}
           </Typography.Text>
         </Space>
       ),
@@ -158,37 +126,31 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
       key: "profile",
       render: (_, user) =>
         user.profile ? (
-          <Space direction="vertical" size={0}>
+          <Space orientation="vertical" size={0}>
             <Typography.Text>{user.profile.gameName || "未设置"}</Typography.Text>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {user.profile.rank || "未定段"} · {positionText(user.profile.mainPosition)}
-              {user.profile.subPosition ? ` / ${positionText(user.profile.subPosition)}` : ""}
-            </Typography.Text>
+            {/* 待审核的新账号位置还没定；位置未填写时也不展示「未填写」占位。
+                段位由用户自行维护（修改需重新审核），后台不重复展示。 */}
+            {user.status !== "PENDING" && !isUnsetPosition(user.profile.mainPosition) ? (
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {positionText(user.profile.mainPosition)}
+                {user.profile.subPosition ? ` / ${positionText(user.profile.subPosition)}` : ""}
+              </Typography.Text>
+            ) : null}
           </Space>
         ) : (
           <Typography.Text type="secondary">未完善</Typography.Text>
         ),
     },
     {
-      title: "段位",
-      key: "rank",
-      width: 150,
-      render: (_, user) => (
-        <Select
-          size="small"
-          style={{ width: 130 }}
-          value={user.profile?.rank ?? ""}
-          options={RANK_OPTIONS}
-          loading={busyId === user.id}
-          onChange={(rank) =>
-            void run(
-              () => postJson("/api/admin/users/rank", { userId: user.id, rank }),
-              user.id,
-              "段位已更新",
-            )
-          }
-        />
-      ),
+      title: "备注",
+      key: "reviewNote",
+      width: 120,
+      render: (_, user) =>
+        user.reviewNote ? (
+          <Tag color="orange">{user.reviewNote}</Tag>
+        ) : (
+          <Typography.Text type="secondary">-</Typography.Text>
+        ),
     },
     {
       title: "审核状态",
@@ -209,17 +171,73 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
     {
       title: "操作",
       key: "actions",
-      width: 330,
+      width: 200,
       render: (_, user) => (
         <Space wrap size={[4, 4]}>
-          {user.status !== "APPROVED" ? (
+          {/* 待审核的新注册账号：只留「通过 / 拒绝」两个决定。 */}
+          {user.status === "PENDING" ? (
+            <>
+              <Button
+                size="small"
+                type="primary"
+                loading={busyId === user.id}
+                onClick={() =>
+                  void run(
+                    () =>
+                      postJson("/api/admin/users/status", { userId: user.id, status: "APPROVED" }),
+                    user.id,
+                    "已通过审核",
+                  )
+                }
+              >
+                通过
+              </Button>
+              <Button
+                size="small"
+                danger
+                loading={busyId === user.id}
+                onClick={() =>
+                  void run(
+                    () =>
+                      postJson("/api/admin/users/status", { userId: user.id, status: "REJECTED" }),
+                    user.id,
+                    "已拒绝",
+                  )
+                }
+              >
+                拒绝
+              </Button>
+            </>
+          ) : null}
+
+          {/* 已通过的正式账号：只管权限与去留。 */}
+          {user.status === "APPROVED" ? (
+            <Button
+              size="small"
+              loading={busyId === user.id}
+              onClick={() =>
+                void run(
+                  () =>
+                    postJson("/api/admin/users/admin", { userId: user.id, isAdmin: !user.isAdmin }),
+                  user.id,
+                  "管理员权限已更新",
+                )
+              }
+            >
+              {user.isAdmin ? "取消管理员" : "设为管理员"}
+            </Button>
+          ) : null}
+
+          {/* 已拒绝的账号保留重新通过的退路（误操作后不用先打回待审核）。 */}
+          {user.status === "REJECTED" ? (
             <Button
               size="small"
               type="primary"
               loading={busyId === user.id}
               onClick={() =>
                 void run(
-                  () => postJson("/api/admin/users/status", { userId: user.id, status: "APPROVED" }),
+                  () =>
+                    postJson("/api/admin/users/status", { userId: user.id, status: "APPROVED" }),
                   user.id,
                   "已通过审核",
                 )
@@ -228,89 +246,24 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
               通过
             </Button>
           ) : null}
-          {user.status !== "REJECTED" ? (
-            <Button
-              size="small"
-              danger
-              loading={busyId === user.id}
-              onClick={() =>
-                void run(
-                  () => postJson("/api/admin/users/status", { userId: user.id, status: "REJECTED" }),
-                  user.id,
-                  "已拒绝",
-                )
-              }
-            >
-              拒绝
-            </Button>
-          ) : null}
+
+          {/* 待审核的新账号直接拒绝即可，不需要额外的删除入口。 */}
           {user.status !== "PENDING" ? (
-            <Button
-              size="small"
-              loading={busyId === user.id}
-              onClick={() =>
-                void run(
-                  () => postJson("/api/admin/users/status", { userId: user.id, status: "PENDING" }),
-                  user.id,
-                  "已设为待审核",
-                )
+            <Popconfirm
+              title={`删除 ${user.username}？`}
+              description="该账号的报名与战绩会一并删除，且不可恢复。"
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              cancelText="取消"
+              onConfirm={() =>
+                run(() => postJson(`/api/admin/users/delete/${user.id}`), user.id, "用户已删除")
               }
             >
-              待审核
-            </Button>
+              <Button size="small" danger icon={<DeleteOutlined />} loading={busyId === user.id}>
+                删除
+              </Button>
+            </Popconfirm>
           ) : null}
-          <Button
-            size="small"
-            onClick={() => {
-              setGameNameTarget(user);
-              setGameNameValue(user.profile?.gameName ?? "");
-            }}
-          >
-            改游戏ID
-          </Button>
-          <Button
-            size="small"
-            onClick={() => {
-              setPasswordTarget(user);
-              setPasswordValue("");
-            }}
-          >
-            重置密码
-          </Button>
-          <Button size="small" onClick={() => void openRecords(user)}>
-            战绩
-          </Button>
-          <Button
-            size="small"
-            loading={busyId === user.id}
-            onClick={() =>
-              void run(
-                () => postJson("/api/admin/users/admin", { userId: user.id, isAdmin: !user.isAdmin }),
-                user.id,
-                "管理员权限已更新",
-              )
-            }
-          >
-            {user.isAdmin ? "取消管理员" : "设为管理员"}
-          </Button>
-          <Popconfirm
-            title={`删除 ${user.username}？`}
-            description="该账号的报名与战绩会一并删除，且不可恢复。"
-            okText="删除"
-            okButtonProps={{ danger: true }}
-            cancelText="取消"
-            onConfirm={() =>
-              run(
-                () => postJson(`/api/admin/users/delete/${user.id}`),
-                user.id,
-                "用户已删除",
-              )
-            }
-          >
-            <Button size="small" danger icon={<DeleteOutlined />} loading={busyId === user.id}>
-              删除
-            </Button>
-          </Popconfirm>
         </Space>
       ),
     },
@@ -329,7 +282,7 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
         </Space>
       }
     >
-      {error ? <Alert type="error" showIcon message={error} style={{ marginBottom: 12 }} /> : null}
+      {error ? <Alert type="error" showIcon title={error} style={{ marginBottom: 12 }} /> : null}
       <Space wrap style={{ marginBottom: 12 }}>
         <Input.Search
           allowClear
@@ -366,126 +319,6 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
       ) : (
         <Empty description="没有符合条件的账号" />
       )}
-
-      <Modal
-        open={Boolean(gameNameTarget)}
-        title={`设置 ${gameNameTarget?.username ?? ""} 的游戏ID`}
-        okText="保存"
-        cancelText="取消"
-        onCancel={() => setGameNameTarget(null)}
-        onOk={() => {
-          const target = gameNameTarget;
-          if (!target) return;
-          void run(
-            () => postJson("/api/admin/users/game_name", { userId: target.id, gameName: gameNameValue }),
-            target.id,
-            "游戏ID已更新",
-          ).then(() => setGameNameTarget(null));
-        }}
-      >
-        <Input
-          value={gameNameValue}
-          maxLength={80}
-          placeholder="游戏ID"
-          onChange={(event) => setGameNameValue(event.target.value)}
-        />
-      </Modal>
-
-      <Modal
-        open={Boolean(passwordTarget)}
-        title={`重置 ${passwordTarget?.username ?? ""} 的密码`}
-        okText="重置"
-        cancelText="取消"
-        onCancel={() => setPasswordTarget(null)}
-        onOk={() => {
-          const target = passwordTarget;
-          if (!target) return;
-          if (passwordValue.length < 6) {
-            message.error("新密码至少 6 位");
-            return;
-          }
-          void run(
-            () => postJson("/api/admin/users/password", { userId: target.id, password: passwordValue }),
-            target.id,
-            "密码重置成功",
-          ).then(() => setPasswordTarget(null));
-        }}
-      >
-        <Input.Password
-          value={passwordValue}
-          placeholder="新密码（至少 6 位）"
-          onChange={(event) => setPasswordValue(event.target.value)}
-        />
-      </Modal>
-
-      <Modal
-        open={Boolean(recordsTarget)}
-        title={`${recordsTarget?.username ?? ""} 的战绩`}
-        width={860}
-        footer={
-          <Space>
-            <Popconfirm
-              title="清空该选手全部战绩？"
-              description="清空后积分与榜单会立即重算，且不可恢复。"
-              okText="清空"
-              okButtonProps={{ danger: true }}
-              cancelText="取消"
-              onConfirm={() => {
-                const target = recordsTarget;
-                if (!target) return;
-                void run(
-                  () => deleteJson(`/api/admin/users/records/${target.id}`),
-                  target.id,
-                  "该选手战绩已清空",
-                ).then(() => setRecordsTarget(null));
-              }}
-            >
-              <Button danger>清空全部战绩</Button>
-            </Popconfirm>
-            <Button onClick={() => setRecordsTarget(null)}>关闭</Button>
-          </Space>
-        }
-        onCancel={() => setRecordsTarget(null)}
-      >
-        {recordsLoading ? (
-          <div className="loading-state">
-            <Spin />
-          </div>
-        ) : records.length ? (
-          <Table
-            rowKey="id"
-            size="small"
-            dataSource={records}
-            pagination={{ pageSize: 8, showSizeChanger: false }}
-            columns={[
-              { title: "赛事", dataIndex: "match_name", key: "match_name" },
-              { title: "小局", dataIndex: "game_no", key: "game_no", width: 70 },
-              { title: "英雄", dataIndex: "champion", key: "champion", width: 120 },
-              {
-                title: "结果",
-                dataIndex: "result",
-                key: "result",
-                width: 80,
-                render: (result: string, record) => (
-                  <Tag color={result === "win" ? "green" : "red"}>
-                    {result === "win" ? "胜" : "负"}
-                    {record.is_mvp ? " · MVP" : ""}
-                  </Tag>
-                ),
-              },
-              {
-                title: "KDA",
-                key: "kda",
-                width: 110,
-                render: (_, record) => `${record.kills}/${record.deaths}/${record.assists}`,
-              },
-              { title: "日期", dataIndex: "played_at", key: "played_at", width: 120 },
-            ]}
-          />
-        ) : (
-          <Empty description="暂无战绩" />
-        )}
-      </Modal>
     </Card>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { SafetyCertificateOutlined, TeamOutlined, TrophyOutlined } from "@ant-design/icons";
-import { Alert, Card, Col, Row, Spin, Statistic, Tabs, Typography } from "antd";
+import { Alert, Card, Col, Row, Spin, Statistic, Tabs } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { LeagueShell } from "@/components/app-shell";
 import { MatchPanel } from "@/components/admin/match-panel";
@@ -63,13 +63,6 @@ export default function AdminPage() {
 
   return (
     <LeagueShell>
-      <section className="page-title">
-        <Typography.Text type="secondary">ADMIN CONSOLE</Typography.Text>
-        <Typography.Title>赛事管理后台</Typography.Title>
-        <Typography.Paragraph>
-          在这里完成账号审核、报名管理、赛事编排与战绩录入。赛事编排与战绩录入需先在「赛事管理」中选择一场赛事。
-        </Typography.Paragraph>
-      </section>
       {loading ? (
         <div className="loading-state">
           <Spin size="large" />
@@ -104,12 +97,20 @@ export default function AdminPage() {
               </Card>
             </Col>
           </Row>
+          {/* 原先 page-title 区块里的说明：只保留影响操作的那一句，不再占一整块版面。 */}
+          <p className="admin-hint">
+            账号审核、报名管理在此完成；赛事编排与战绩录入需先在「赛事管理」中选择一场赛事。
+          </p>
           <Tabs
-            style={{ marginTop: 16 }}
+            style={{ marginTop: 12 }}
             items={[
               { key: "users", label: "用户管理", children: <UserPanel onChanged={loadSummary} /> },
               { key: "signups", label: "报名记录", children: <SignupPanel /> },
-              { key: "matches", label: "赛事管理", children: <MatchPanel onChanged={loadSummary} /> },
+              {
+                key: "matches",
+                label: "赛事管理",
+                children: <MatchPanel onChanged={loadSummary} />,
+              },
             ]}
           />
         </>

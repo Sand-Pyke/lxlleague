@@ -1,6 +1,7 @@
 /**
- * 个人主页可选背景白名单（旧项目 /static/bgs 的 8 张图，文件已迁到 public/assets/bgs）。
- * 服务端校验与前端选择弹窗共用，因此不能依赖 Prisma。
+ * 自定义背景白名单（旧项目 /static/bgs 的 8 张图，文件已迁到 public/assets/bgs）。
+ * 服务端校验与前端选择弹窗共用，因此不能依赖 Prisma。背景是全站生效的，
+ * 只在深色模式下启用；个人主页只是选择入口。
  */
 
 export const BACKGROUND_PREFIX = "/assets/bgs/";

@@ -1,6 +1,12 @@
 "use client";
 
-import { ArrowDownOutlined, ArrowUpOutlined, ReloadOutlined, SwapOutlined, UserAddOutlined } from "@ant-design/icons";
+import {
+  ArrowDownOutlined,
+  ArrowUpOutlined,
+  ReloadOutlined,
+  SwapOutlined,
+  UserAddOutlined,
+} from "@ant-design/icons";
 import {
   Avatar,
   Button,
@@ -19,6 +25,7 @@ import {
   message,
 } from "antd";
 import { useMemo, useState } from "react";
+import { RankLabel } from "@/components/rank-label";
 import { POSITION_OPTIONS, RANKS, TEAM_CODES, positionText } from "@/lib/admin-options";
 import { errorText, postJson, successText } from "./api-client";
 
@@ -75,7 +82,7 @@ const positionSelectOptions = POSITION_OPTIONS.map((position) => ({
 
 const rankFilterOptions = RANKS.filter((rank) => rank !== "").map((rank) => ({
   value: rank || "none",
-  label: rank || "未设置",
+  label: <RankLabel rank={rank} />,
 }));
 
 const poolFilterOptions = [
@@ -221,9 +228,7 @@ export function RosterPanel({ board, loading, onReload }: Props) {
             okText="删除"
             okButtonProps={{ danger: true }}
             cancelText="取消"
-            onConfirm={() =>
-              run(() => postJson(`/api/admin/team/delete/${team.id}`), "队伍已删除")
-            }
+            onConfirm={() => run(() => postJson(`/api/admin/team/delete/${team.id}`), "队伍已删除")}
           >
             <Button size="small" danger type="text" loading={busy}>
               删除
@@ -232,14 +237,16 @@ export function RosterPanel({ board, loading, onReload }: Props) {
         }
       >
         {members.length ? (
-          <Space direction="vertical" size={6} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={6} style={{ width: "100%" }}>
             {members.map((member) => (
               <Space key={member.id} align="center" wrap style={{ width: "100%" }}>
                 <Avatar size="small" src={member.avatar || undefined}>
                   {member.username.slice(0, 1)}
                 </Avatar>
                 <Typography.Text style={{ minWidth: 96 }}>{member.username}</Typography.Text>
-                <Tag color="purple">{member.rank || "未定段"}</Tag>
+                <Tag color="purple">
+                  <RankLabel rank={member.rank} fallback="未定段" />
+                </Tag>
                 {match.use_fee ? <Tag>费用 {member.fee}</Tag> : null}
                 <Select
                   size="small"
@@ -267,7 +274,8 @@ export function RosterPanel({ board, loading, onReload }: Props) {
                     loading={busy}
                     onClick={() =>
                       run(
-                        () => postJson("/api/admin/team/move", { signId: member.id, direction: "up" }),
+                        () =>
+                          postJson("/api/admin/team/move", { signId: member.id, direction: "up" }),
                         "已调换位置",
                       )
                     }
@@ -281,7 +289,10 @@ export function RosterPanel({ board, loading, onReload }: Props) {
                     onClick={() =>
                       run(
                         () =>
-                          postJson("/api/admin/team/move", { signId: member.id, direction: "down" }),
+                          postJson("/api/admin/team/move", {
+                            signId: member.id,
+                            direction: "down",
+                          }),
                         "已调换位置",
                       )
                     }
@@ -326,7 +337,10 @@ export function RosterPanel({ board, loading, onReload }: Props) {
           icon={<ReloadOutlined />}
           loading={busy}
           onClick={() =>
-            run(() => postJson("/api/admin/team/auto_assign", { matchId: match.id }), "智能分配完成")
+            run(
+              () => postJson("/api/admin/team/auto_assign", { matchId: match.id }),
+              "智能分配完成",
+            )
           }
         >
           一键智能分配
@@ -469,7 +483,9 @@ export function RosterPanel({ board, loading, onReload }: Props) {
                           </Typography.Text>
                         ) : null}
                       </Typography.Text>
-                      <Tag color="purple">{sign.rank || "未定段"}</Tag>
+                      <Tag color="purple">
+                        <RankLabel rank={sign.rank} fallback="未定段" />
+                      </Tag>
                       <Tag>{positionText(sign.main_pos)}</Tag>
                       {sign.sub_pos ? <Tag>副 {positionText(sign.sub_pos)}</Tag> : null}
                       {sign.can_substitute ? <Tag color="blue">可替补</Tag> : null}
@@ -536,7 +552,8 @@ export function RosterPanel({ board, loading, onReload }: Props) {
             return;
           }
           void run(
-            () => postJson("/api/admin/team/create", { matchId: match.id, name: newTeamName.trim() }),
+            () =>
+              postJson("/api/admin/team/create", { matchId: match.id, name: newTeamName.trim() }),
             "队伍创建成功",
           ).then(() => setCreateOpen(false));
         }}

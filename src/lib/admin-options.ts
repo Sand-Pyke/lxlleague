@@ -24,10 +24,47 @@ export const RANK_OPTIONS = RANKS.map((rank) => ({
   label: rank || "未设置",
 }));
 
-/** 注册表单可选段位：与旧注册弹窗一致，仅十个大段，且必须显式选择。 */
+/**
+ * 注册表单可选段位：只列十个大段（「未定段」/空串不是可选项）。
+ * 段位是**选填**的，注册时没选也没关系，之后可在个人中心提交修改申请。
+ */
 export const REGISTER_RANK_OPTIONS = RANK_OPTIONS.filter(
   (option) => option.value && option.value !== "未定段",
 );
+
+/** 用户申请修改段位时写进 User.reviewNote 的备注文案。 */
+export const RANK_REVIEW_NOTE = "-修改段位";
+
+/**
+ * 归一化段位：库里统一用空串表示「未填写」，「未定段」折算成空串，
+ * 白名单以外的值当作未填写。
+ */
+export function normalizeRank(value: unknown): string {
+  const rank = typeof value === "string" ? value.trim() : "";
+  if (!rank || rank === "未定段") return "";
+  return RANKS.includes(rank) ? rank : "";
+}
+
+/**
+ * 段位图标：资源在 public/assets/rank 下，按英文大段命名。
+ * 键与上面的 RANKS 中文词表一一对应（王者 = 嘴强王者 / Challenge）。
+ * 「未定段」与空串没有对应资源，按无图标处理。
+ */
+export const RANK_ICON: Record<string, string> = {
+  王者: "/assets/rank/Challenge.png",
+  宗师: "/assets/rank/Grandmaster.png",
+  大师: "/assets/rank/Master.png",
+  钻石: "/assets/rank/Diamond.png",
+  翡翠: "/assets/rank/Emerald.png",
+  铂金: "/assets/rank/Platinum.png",
+  黄金: "/assets/rank/Gold.png",
+  白银: "/assets/rank/Silver.png",
+  青铜: "/assets/rank/Bronze.png",
+  黑铁: "/assets/rank/Iron.png",
+};
+
+/** 段位图标地址；未设置、未定段或词表以外的段位返回空串。 */
+export const rankIcon = (rank: string | null | undefined) => RANK_ICON[(rank ?? "").trim()] ?? "";
 
 export const BO_OPTIONS = ["BO1", "BO3", "BO5"];
 

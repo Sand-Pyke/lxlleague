@@ -7,18 +7,39 @@ import {
   UserAddOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-import { Alert, Button, Card, Divider, Form, Input, Space, Typography, message } from "antd";
+import {
+  Alert,
+  Button,
+  Card,
+  Divider,
+  Form,
+  Input,
+  Select,
+  Space,
+  Typography,
+  message,
+} from "antd";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { RankLabel } from "@/components/rank-label";
+import { REGISTER_RANK_OPTIONS } from "@/lib/admin-options";
+
 type AuthMode = "login" | "register";
 
 type AuthValues = {
   username: string;
   password: string;
   confirmPassword?: string;
+  rank?: string;
   captchaAnswer?: string;
 };
+
+/** 段位选项带图标，与站内其它段位展示保持一致。 */
+const RANK_ICON_OPTIONS = REGISTER_RANK_OPTIONS.map((option) => ({
+  value: option.value,
+  label: <RankLabel rank={option.value} />,
+}));
 
 export function AuthForm({ mode }: { mode: AuthMode }) {
   const isRegister = mode === "register";
@@ -60,6 +81,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
             ? {
                 username: values.username.trim(),
                 password: values.password,
+                rank: values.rank ?? "",
                 captchaAnswer: values.captchaAnswer,
               }
             : { username: values.username.trim(), password: values.password },
@@ -84,12 +106,11 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
 
   return (
     <main className="auth-page">
-      <Card className="auth-card" bordered={false}>
+      <Card className="auth-card" variant="borderless">
         {contextHolder}
-        <Space direction="vertical" size={20} className="auth-card__content">
+        <Space orientation="vertical" size={20} className="auth-card__content">
           <div className="auth-emblem">{isRegister ? <UserAddOutlined /> : <LoginOutlined />}</div>
           <div>
-            <Typography.Text type="secondary">LXL ACCOUNT</Typography.Text>
             <Typography.Title level={2}>
               {isRegister ? "创建你的召唤师账号" : "欢迎回到峡谷"}
             </Typography.Title>
@@ -99,7 +120,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                 : "登录后继续管理你的赛事资料。"}
             </Typography.Paragraph>
           </div>
-          {error && <Alert type="error" showIcon message={error} />}
+          {error && <Alert type="error" showIcon title={error} />}
           <Form layout="vertical" requiredMark={false} onFinish={submit} autoComplete="on">
             <Form.Item
               name="username"
@@ -153,6 +174,16 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                     placeholder="再次输入密码"
                     size="large"
                     autoComplete="new-password"
+                  />
+                </Form.Item>
+                <Form.Item name="rank" label="段位（选填）">
+                  <Select
+                    size="large"
+                    allowClear
+                    placeholder="选择你的当前段位"
+                    options={RANK_ICON_OPTIONS}
+                    virtual={false}
+                    classNames={{ popup: { root: "rank-dropdown" } }}
                   />
                 </Form.Item>
                 <Form.Item

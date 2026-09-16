@@ -155,7 +155,7 @@ export function SignupPanel() {
         </Space>
       }
     >
-      {error ? <Alert type="error" showIcon message={error} style={{ marginBottom: 12 }} /> : null}
+      {error ? <Alert type="error" showIcon title={error} style={{ marginBottom: 12 }} /> : null}
       <Space wrap style={{ marginBottom: 12 }}>
         <Input.Search
           allowClear

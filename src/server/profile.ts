@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getPlayers } from "@/lib/repository";
-import { getSessionUser } from "@/server/auth";
+import { coreAdminLabel, getSessionUser, isCoreAdminUsername } from "@/server/auth";
 import { ensureProfile } from "@/server/account";
 import { listPlayerCards, profileOverview } from "@/server/records";
 
@@ -20,21 +20,32 @@ export async function getProfile(request: NextRequest) {
   const isSelf = viewer?.id === targetId;
   if (isSelf) await ensureProfile(targetId);
 
-  const [overview, cards] = await Promise.all([profileOverview(targetId, isSelf), listPlayerCards()]);
+  const [overview, cards] = await Promise.all([
+    profileOverview(targetId, isSelf),
+    listPlayerCards(),
+  ]);
   if (!overview) return NextResponse.json({ msg: "用户不存在" }, { status: 404 });
 
   const account = await prisma.user.findUnique({
     where: { id: targetId },
-    select: { isAdmin: true, status: true },
+    select: { isAdmin: true, status: true, pendingRank: true, reviewNote: true },
   });
   const index = cards.findIndex((card) => card.id === targetId);
+  // 核心管理员是系统账号而非选手，前端据此隐藏段位/位置/排名与数据面板。
+  const isCoreAdmin = isCoreAdminUsername(overview.player.username);
 
   return NextResponse.json({
     isSelf,
+    is_core_admin: isCoreAdmin,
     user: {
       ...overview.player,
+      // 界面名称换成「超级vip管理员」；username（登录用的账户ID）保持真实值。
+      name: isCoreAdmin ? coreAdminLabel : overview.player.name,
       is_admin: account?.isAdmin ?? false,
       status: account?.status ?? "",
+      // 审核进度只对本人有意义，看别人的主页时不外泄。
+      pending_rank: isSelf ? (account?.pendingRank ?? "") : "",
+      review_note: isSelf ? (account?.reviewNote ?? "") : "",
     },
     stats: overview.stats,
     heroes: overview.heroes,

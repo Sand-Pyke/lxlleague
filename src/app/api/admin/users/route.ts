@@ -4,4 +4,5 @@ import { adminUserList } from "@/server/admin";
 
 export const dynamic = "force-dynamic";
 
-export const GET = adminRoute(() => adminUserList());
+// 当前登录的管理员自己不列进用户管理列表。
+export const GET = adminRoute(({ adminId }) => adminUserList(adminId));

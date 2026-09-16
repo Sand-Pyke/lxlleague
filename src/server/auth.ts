@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import bcrypt from "bcryptjs";
+import { normalizeRank } from "@/lib/admin-options";
 import { prisma } from "@/lib/prisma";
 
 const cookieName = "lxl_user_id";
@@ -76,7 +77,9 @@ export async function getViewer() {
       username: true,
       isAdmin: true,
       status: true,
-      profile: { select: { mainPosition: true, subPosition: true } },
+      // 自定义背景现在是全站生效的，因此顶栏外壳也需要拿到它。
+      backgroundImage: true,
+      profile: { select: { mainPosition: true, subPosition: true, avatar: true } },
     },
   });
 }
@@ -153,13 +156,15 @@ export async function register(request: NextRequest) {
   if (!isValidCaptcha(request, body.captchaAnswer)) return captchaResponseError();
   if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]{2,24}$/.test(username) || password.length < 6)
     return invalidInput();
+  // 段位为选填项：未选、选「未定段」或值不在白名单里都按未填写存空串。
+  const rank = normalizeRank(body.rank);
   try {
     const user = await prisma.user.create({
       data: {
         username,
         passwordHash: await bcrypt.hash(password, 12),
         status: "PENDING",
-        profile: { create: { name: username, gameName: username } },
+        profile: { create: { name: username, gameName: username, rank } },
       },
     });
     const response = NextResponse.json({
@@ -177,6 +182,23 @@ export async function register(request: NextRequest) {
     throw error;
   }
 }
+
+/**
+ * 核心管理员账号名（与 prisma/seed.mjs 使用同一个环境变量）。
+ * 该账号是运维用的系统账号、并非参赛选手：个人主页不展示段位/位置/排名与各项数据面板。
+ * 其他被授予 isAdmin 的普通选手仍按普通用户展示。
+ */
+const coreAdminUsername = process.env.ADMIN_USERNAME || "admin";
+
+export const isCoreAdminUsername = (username: string | null | undefined) =>
+  Boolean(username) && username === coreAdminUsername;
+
+/**
+ * 核心管理员在界面上的展示名。
+ * 账号本身仍是 `admin`（用于登录与权限判定），只在展示身份的地方换成这个称呼；
+ * 「我的资料设置」里的账户ID 仍显示真实账号，避免与实际登录名混淆。
+ */
+export const coreAdminLabel = "超级vip管理员";
 
 export async function requireAdmin(request: NextRequest) {
   const user = await getSessionUser(request);

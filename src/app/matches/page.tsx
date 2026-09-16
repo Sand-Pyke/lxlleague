@@ -1,18 +1,24 @@
 "use client";
 
 import { CalendarOutlined } from "@ant-design/icons";
-import { Card, Empty, Segmented, Spin, Typography } from "antd";
+import { Card, Empty, Segmented, Spin } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { LeagueShell } from "@/components/app-shell";
+import { useViewer } from "@/components/auth-provider";
 import { MatchCard } from "@/components/match-card";
 import type { Match } from "@/lib/data";
 
 type MatchTab = "today" | "history" | "mine";
 
 export default function MatchesPage() {
+  const viewer = useViewer();
   const [matches, setMatches] = useState<Match[]>([]);
   const [tab, setTab] = useState<MatchTab>("today");
   const [loading, setLoading] = useState(true);
+
+  // 核心管理员（admin）是运维账号、不参与比赛，「我的比赛」对其没有意义；
+  // 普通选手仍保留该页签。
+  const showMineTab = !viewer?.isCoreAdmin;
 
   useEffect(() => {
     fetch("/api/match/list")
@@ -33,12 +39,7 @@ export default function MatchesPage() {
 
   return (
     <LeagueShell>
-      <section className="page-title">
-        <Typography.Text type="secondary">MATCH CENTER</Typography.Text>
-        <Typography.Title>比赛中心</Typography.Title>
-        <Typography.Paragraph>参与峡谷对决，记录每一次高光时刻。</Typography.Paragraph>
-      </section>
-      <Card className="antd-panel" bordered={false}>
+      <Card className="antd-panel" variant="borderless">
         <Segmented
           block
           value={tab}
@@ -46,7 +47,7 @@ export default function MatchesPage() {
           options={[
             { label: "当前赛事", value: "today", icon: <CalendarOutlined /> },
             { label: "历史比赛", value: "history" },
-            { label: "我的比赛", value: "mine" },
+            ...(showMineTab ? [{ label: "我的比赛", value: "mine" }] : []),
           ]}
         />
       </Card>

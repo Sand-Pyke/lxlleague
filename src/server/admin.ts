@@ -3,6 +3,7 @@ import {
   MATCH_STATUSES,
   RANKS,
   REVIEW_STATUSES,
+  normalizeRank,
   type ReviewStatus,
 } from "@/lib/admin-options";
 import { prisma } from "@/lib/prisma";
@@ -138,7 +139,9 @@ export async function teamsBoard(matchId: number) {
       include: {
         user: {
           include: {
-            profile: { select: { rank: true, avatar: true, mainPosition: true, subPosition: true } },
+            profile: {
+              select: { rank: true, avatar: true, mainPosition: true, subPosition: true },
+            },
           },
         },
       },
@@ -189,15 +192,21 @@ export async function teamsBoard(matchId: number) {
   };
 }
 
-/** 管理员视角的用户列表（含审核状态与游戏资料）。 */
-export async function adminUserList() {
+/**
+ * 管理员视角的用户列表（含审核状态与游戏资料）。
+ * 当前登录的管理员自己不列进去：自己的账号在这里既管不了、也没必要看。
+ */
+export async function adminUserList(viewerId?: number) {
   const users = await prisma.user.findMany({
+    where: viewerId ? { id: { not: viewerId } } : undefined,
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     select: {
       id: true,
       username: true,
       isAdmin: true,
       status: true,
+      reviewNote: true,
+      pendingRank: true,
       kookName: true,
       createdAt: true,
       profile: {
@@ -214,32 +223,59 @@ export async function adminUserList() {
   return { users };
 }
 
-/** 审核用户注册申请。管理员账号不能被置为非 APPROVED，避免把自己锁在门外。 */
+/**
+ * 审核用户。段位是注册时提交、审核通过后锁定的资料：
+ * 用户申请修改段位后会在 pendingRank 里挂一笔待审的新值，
+ * 只有「通过」才真正写进资料；拒绝或打回则保留原段位。
+ * 管理员账号不能被置为非 APPROVED，避免把自己锁在门外。
+ */
 export async function setUserStatus(userId: number, status: unknown) {
   if (!REVIEW_STATUSES.includes(status as ReviewStatus)) throw badRequest("审核参数无效");
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } });
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isAdmin: true, username: true, pendingRank: true },
+  });
   if (!user) throw notFound("用户不存在");
   const next = status as ReviewStatus;
-  if (user.isAdmin && next !== "APPROVED") throw new ApiError(409, "管理员账号不能被拒绝或设为待审核");
-  await prisma.user.update({ where: { id: userId }, data: { status: next } });
+  if (user.isAdmin && next !== "APPROVED")
+    throw new ApiError(409, "管理员账号不能被拒绝或设为待审核");
+
+  if (next === "APPROVED" && user.pendingRank) {
+    await writeUserRank(userId, user.username, user.pendingRank);
+  }
+  await prisma.user.update({
+    where: { id: userId },
+    // 审核结束后清掉待审段位与备注，避免同一次申请被重复应用。
+    data: { status: next, pendingRank: "", reviewNote: "" },
+  });
   return { msg: "审核状态已更新", status: next };
 }
 
-/** 修改段位：归一化「未定段」并同步历史报名快照，保证各处显示一致。 */
+/** 把段位落到资料上并同步历史报名快照；「未定段」统一折算成空串。 */
+async function writeUserRank(userId: number, username: string, rank: string) {
+  const stored = normalizeRank(rank);
+  await prisma.$transaction([
+    prisma.playerProfile.upsert({
+      where: { userId },
+      update: { rank: stored },
+      create: { userId, name: username, gameName: username, rank: stored },
+    }),
+    prisma.matchSignup.updateMany({ where: { userId }, data: { rankAtSignup: stored } }),
+  ]);
+  return stored;
+}
+
+/** 管理员直接改段位：同时清掉待审的段位申请，避免旧申请被重复应用。 */
 export async function setUserRank(userId: number, rank: string) {
   if (!RANKS.includes(rank)) throw badRequest("段位不合法");
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw badRequest("用户不存在");
 
-  const stored = rank === "未定段" ? "" : rank;
-  await prisma.$transaction([
-    prisma.playerProfile.upsert({
-      where: { userId },
-      update: { rank: stored },
-      create: { userId, name: user.username, gameName: user.username, rank: stored },
-    }),
-    prisma.matchSignup.updateMany({ where: { userId }, data: { rankAtSignup: stored } }),
-  ]);
+  const stored = await writeUserRank(userId, user.username, rank);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { pendingRank: "", reviewNote: "" },
+  });
   return { msg: `已将 ${user.username} 段位改为「${stored || "未设置"}」` };
 }
 
@@ -309,7 +345,10 @@ export async function signupList() {
   const signups = await prisma.matchSignup.findMany({
     where: { match: { status: "CREATED" } },
     orderBy: [{ matchId: "desc" }, { id: "asc" }],
-    include: { user: { select: { id: true, username: true } }, match: { select: { id: true, name: true } } },
+    include: {
+      user: { select: { id: true, username: true } },
+      match: { select: { id: true, name: true } },
+    },
   });
   return {
     signup_list: signups.map((signup) => ({
@@ -333,6 +372,5 @@ export async function listMatchRecordsForAdmin(matchId: number) {
 /** 报名时的字段校验（原 /api/match/signup 规则）。 */
 export function assertSignupPayload(mainPosition: unknown, subPosition: unknown) {
   if (!isPosition(mainPosition)) throw new ApiError(400, "主位置不合法");
-  if (!isPosition(subPosition) && subPosition !== "无")
-    throw new ApiError(400, "副位置不合法");
+  if (!isPosition(subPosition) && subPosition !== "无") throw new ApiError(400, "副位置不合法");
 }

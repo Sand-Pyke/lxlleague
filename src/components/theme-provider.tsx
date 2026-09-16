@@ -20,10 +20,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const savedMode = window.localStorage.getItem("lxl-theme") as ThemeMode | null;
-    const preferredMode = window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
-    setMode(savedMode ?? preferredMode);
+    // 默认深色：不再回退到系统 prefers-color-scheme，避免浅色系统下被被动切成 light。
+    setMode(savedMode ?? "dark");
   }, []);
 
   useEffect(() => {
@@ -38,7 +36,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         colorPrimary: "#6d5dfc",
         colorInfo: "#6d5dfc",
         borderRadius: 12,
-        fontFamily: '"PingFang SC", "Microsoft YaHei", system-ui, sans-serif',
+        // 与 globals.css 的 --font-sans 保持一致，避免 antd 组件与页面字体不一致。
+        fontFamily:
+          '"Segoe UI", "Noto Sans SC", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif',
+        // 标题与 <strong> 的默认字重：antd 默认 600 会在只有 400/700 的中文字体上
+        // 落到 Bold，大型标题显得生硬；降到 500 更柔和。
+        fontWeightStrong: 500,
       },
       components: {
         Card: { borderRadiusLG: 16 },

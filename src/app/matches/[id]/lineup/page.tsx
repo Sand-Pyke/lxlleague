@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LeagueShell } from "@/components/app-shell";
+import { RankLabel } from "@/components/rank-label";
 import { getMatchLineupData, getMatchRoundsData } from "@/server/matches";
 
 export const dynamic = "force-dynamic";
@@ -31,14 +32,14 @@ export default async function Lineup({
 
   return (
     <LeagueShell>
-      <div className="back">
-        <Link href={`/matches/${id}`}>← 返回赛事详情</Link>
+      {/* 原先 page-title 区块里的赛事名与当前轮次，收成一行放在返回链接旁边。 */}
+      <div className="lineup-head">
+        <div className="back">
+          <Link href={`/matches/${id}`}>← 返回赛事详情</Link>
+        </div>
+        <h2 className="lineup-title">{data ? data.match.name : "对阵阵容"}</h2>
+        <span className="lineup-round">第 {shown} 轮 · 对阵阵容</span>
       </div>
-      <section className="page-title centered">
-        <p>MATCHUP</p>
-        <h1>{data ? data.match.name : "对阵阵容"}</h1>
-        <span>第 {shown} 轮 · 对阵阵容</span>
-      </section>
       <section className="panel game-tabs">
         {rounds.map((item) => (
           <Link
@@ -46,8 +47,7 @@ export default async function Lineup({
             key={item}
             href={`/matches/${id}/lineup?round=${item}`}
           >
-            第 {item} 轮
-            {filledRounds.has(item) && <i className="game-dot" />}
+            第 {item} 轮{filledRounds.has(item) && <i className="game-dot" />}
           </Link>
         ))}
       </section>
@@ -71,9 +71,11 @@ export default async function Lineup({
                     <span>{row.pos}</span>
                     {row.name ? (
                       <>
-                        <img src={row.avatar} alt="" />
+                        <img src={row.avatar || undefined} alt="" />
                         <b>{row.name}</b>
-                        <em>{row.rank}</em>
+                        <em>
+                          <RankLabel rank={row.rank} fallback="未定段" />
+                        </em>
                       </>
                     ) : (
                       <em>— 空 —</em>
@@ -90,9 +92,11 @@ export default async function Lineup({
                   <article key={row.pos}>
                     {row.name ? (
                       <>
-                        <em>{row.rank}</em>
+                        <em>
+                          <RankLabel rank={row.rank} fallback="未定段" />
+                        </em>
                         <b>{row.name}</b>
-                        <img src={row.avatar} alt="" />
+                        <img src={row.avatar || undefined} alt="" />
                       </>
                     ) : (
                       <em>— 空 —</em>
