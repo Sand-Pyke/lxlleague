@@ -16,11 +16,12 @@ const prisma = new PrismaClient();
 try {
   await prisma.user.upsert({
     where: { username },
-    update: { isAdmin: true, passwordHash: await bcrypt.hash(password, 12) },
+    update: { isAdmin: true, status: "APPROVED", passwordHash: await bcrypt.hash(password, 12) },
     create: {
       username,
       passwordHash: await bcrypt.hash(password, 12),
       isAdmin: true,
+      status: "APPROVED",
       profile: { create: { name: username, gameName: username } },
     },
   });

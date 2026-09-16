@@ -15,6 +15,7 @@ import {
   Divider,
   Form,
   Input,
+  Select,
   Space,
   Typography,
   message,
@@ -22,6 +23,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { REGISTER_RANK_OPTIONS } from "@/lib/admin-options";
 
 type AuthMode = "login" | "register";
 
@@ -29,6 +31,7 @@ type AuthValues = {
   username: string;
   password: string;
   confirmPassword?: string;
+  rank?: string;
   agreement?: boolean;
 };
 
@@ -46,12 +49,20 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
       const response = await fetch(isRegister ? "/api/register" : "/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: values.username.trim(), password: values.password }),
+        body: JSON.stringify(
+          isRegister
+            ? { username: values.username.trim(), password: values.password, rank: values.rank }
+            : { username: values.username.trim(), password: values.password },
+        ),
       });
       const result = await response.json();
       if (!response.ok || !result.ok) throw new Error(result.error || "请求失败，请稍后重试");
-      await messageApi.success(isRegister ? "注册成功，欢迎加入 LSPL" : "登录成功");
-      router.push("/profile");
+      // 注册后账号处于待审核状态、不签发会话，因此回登录页而不是个人主页。
+      await messageApi.success(
+        isRegister ? result.message || "注册成功，请等待管理员审核后再登录。" : "登录成功",
+        isRegister ? 2 : 1,
+      );
+      router.push(isRegister ? "/login" : "/profile");
       router.refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "请求失败，请稍后重试");
@@ -111,6 +122,19 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
             </Form.Item>
             {isRegister && (
               <>
+                <Form.Item
+                  name="rank"
+                  label="段位"
+                  rules={[{ required: true, message: "请选择段位" }]}
+                >
+                  <Select
+                    placeholder="选择段位"
+                    size="large"
+                    options={[...REGISTER_RANK_OPTIONS]}
+                    showSearch
+                    optionFilterProp="label"
+                  />
+                </Form.Item>
                 <Form.Item
                   name="confirmPassword"
                   label="确认密码"

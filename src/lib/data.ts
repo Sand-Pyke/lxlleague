@@ -1,21 +1,41 @@
 /**
  * 数据层的公共类型。
  *
- * 初始状态不包含任何演示或 Mock 记录；接入持久化数据库后，由仓储层填充这些数据。
+ * 选手的对局统计（胜场 / KDA / MVP / 积分）一律由 MatchGameRecord 现算得出，
+ * 不在选手资料表里冗余存储，因此这里的字段是聚合结果而非数据库列。
  */
 export type Player = {
   id: number;
   name: string;
+  username: string;
   gameName: string;
+  /** 主位置（历史字段名，等价于 mainPosition） */
   position: string;
+  mainPosition: string;
+  subPosition: string;
   rank: string;
+  bio: string;
+  avatar: string;
+  kookName: string;
+  background: string;
   wins: number;
   losses: number;
+  games: number;
   winRate: number;
   kda: number;
   mvp: number;
-  bio: string;
-  avatar: string;
+  svp: number;
+  points: number;
+  teamChampion: number;
+  runnerup: number;
+  mvpRate: number;
+  avgKills: number;
+  avgDeaths: number;
+  avgAssists: number;
+  /** 最常用英雄 */
+  hero: string;
+  /** 最近 10 场胜负序列，如 "W L W W" */
+  recent: string;
 };
 
 export type Match = {
@@ -30,4 +50,11 @@ export type Match = {
   teams: [string, string];
   score: [number, number];
   round: string;
+  /** 直播链接（仅 LIVE 状态可设置） */
+  liveUrl: string;
+  /** 是否启用选手费用预算 */
+  useFee: boolean;
+  currentRound: number;
+  teamOneId: number | null;
+  teamTwoId: number | null;
 };

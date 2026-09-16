@@ -10,6 +10,7 @@ import { Button, Card, Col, Empty, Row, Space, Statistic, Typography } from "ant
 import Link from "next/link";
 import { LeagueShell, Status } from "@/components/app-shell";
 import { MatchCard } from "@/components/match-card";
+import { positionText } from "@/lib/admin-options";
 import type { Match, Player } from "@/lib/data";
 import { useEffect, useState } from "react";
 
@@ -103,17 +104,17 @@ export default function Home() {
           >
             {leaders.length ? (
               leaders.map((player, index) => (
-                <div className="rank-line" key={player.id}>
+                <Link className="rank-line" href={`/profile?uid=${player.id}`} key={player.id}>
                   <strong className={`rank-number rank-${index + 1}`}>{index + 1}</strong>
                   <img src={player.avatar} alt="" />
                   <div>
                     <b>{player.name}</b>
                     <small>
-                      {player.position} · {player.rank}
+                      {positionText(player.position)} · {player.rank || "未设置"}
                     </small>
                   </div>
                   <span>{player.winRate}% 胜率</span>
-                </div>
+                </Link>
               ))
             ) : (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无选手数据" />

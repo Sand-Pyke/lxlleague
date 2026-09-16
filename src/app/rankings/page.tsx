@@ -3,6 +3,7 @@
 import { CrownOutlined } from "@ant-design/icons";
 import { Avatar, Card, Empty, Table, Tag, Typography } from "antd";
 import type { TableColumnsType } from "antd";
+import Link from "next/link";
 import { LeagueShell } from "@/components/app-shell";
 import type { Player } from "@/lib/data";
 import { useEffect, useState } from "react";
@@ -26,13 +27,13 @@ export default function RankingsPage() {
       title: "选手",
       key: "player",
       render: (_, player) => (
-        <span className="table-player">
+        <Link className="table-player" href={`/profile?uid=${player.id}`}>
           <Avatar src={player.avatar} />{" "}
           <span>
             <b>{player.name}</b>
             <small>{player.gameName}</small>
           </span>
-        </span>
+        </Link>
       ),
     },
     { title: "位置", dataIndex: "position", key: "position", responsive: ["sm"] },

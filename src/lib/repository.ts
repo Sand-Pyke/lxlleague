@@ -1,26 +1,9 @@
-import type { Match as DbMatch, PlayerProfile } from "@prisma/client";
+import type { Match as DbMatch } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { Match, Player } from "@/lib/data";
+import { listPlayerCards, playerCardByUserId, toPlayer } from "@/server/records";
 
-function playerFrom(profile: PlayerProfile): Player {
-  const totalGames = profile.wins + profile.losses;
-  return {
-    id: profile.id,
-    name: profile.name,
-    gameName: profile.gameName,
-    position: profile.position,
-    rank: profile.rank,
-    wins: profile.wins,
-    losses: profile.losses,
-    winRate: totalGames ? Number(((profile.wins / totalGames) * 100).toFixed(1)) : 0,
-    kda: profile.kda,
-    mvp: profile.mvp,
-    bio: profile.bio,
-    avatar: profile.avatar,
-  };
-}
-
-function matchFrom(match: DbMatch, signed = false): Match {
+export function matchFrom(match: DbMatch, signed = false): Match {
   return {
     id: match.id,
     name: match.name,
@@ -33,14 +16,16 @@ function matchFrom(match: DbMatch, signed = false): Match {
     teams: [match.blueTeam, match.redTeam],
     score: [match.blueScore, match.redScore],
     round: match.round,
+    liveUrl: match.liveUrl,
+    useFee: match.useFee,
+    currentRound: match.currentRound,
+    teamOneId: match.teamOneId,
+    teamTwoId: match.teamTwoId,
   };
 }
 
-export async function getPlayers() {
-  const profiles = await prisma.playerProfile.findMany({
-    orderBy: [{ wins: "desc" }, { kda: "desc" }],
-  });
-  return profiles.map(playerFrom);
+export async function getPlayers(): Promise<Player[]> {
+  return listPlayerCards();
 }
 
 export async function getMatches(userId?: number) {
@@ -58,35 +43,87 @@ export async function getMatchById(id: number) {
   return match ? matchFrom(match) : null;
 }
 
+/** 参赛名单：以报名记录为准（含队伍与位置槽），统计取该选手的战绩聚合。 */
 export async function getMatchPlayers(matchId: number) {
-  const signups = await prisma.matchSignup.findMany({
-    where: { matchId },
-    orderBy: { createdAt: "asc" },
-    include: { user: { include: { profile: true } } },
-  });
-  return signups.flatMap((signup) =>
-    signup.user.profile ? [playerFrom(signup.user.profile)] : [],
-  );
-}
+  const [signups, records] = await Promise.all([
+    prisma.matchSignup.findMany({
+      where: { matchId },
+      orderBy: [{ positionOrder: "asc" }, { createdAt: "asc" }],
+      include: {
+        user: {
+          include: {
+            profile: {
+              include: {
+                user: { select: { username: true, kookName: true, backgroundImage: true } },
+              },
+            },
+          },
+        },
+      },
+    }),
+    prisma.matchGameRecord.findMany({
+      where: { matchId },
+      orderBy: [{ playedAt: "desc" }, { id: "desc" }],
+    }),
+  ]);
 
-export async function getHomeData() {
-  const [matches, players] = await Promise.all([getMatches(), getPlayers()]);
-  return { matches, players };
+  const byUser = new Map<number, typeof records>();
+  for (const record of records) {
+    const bucket = byUser.get(record.userId) ?? [];
+    bucket.push(record);
+    byUser.set(record.userId, bucket);
+  }
+
+  return signups.flatMap((signup) => {
+    const profile = signup.user.profile;
+    if (!profile) return [];
+    return [
+      {
+        ...toPlayer(profile, byUser.get(signup.userId) ?? []),
+        signupId: signup.id,
+        teamId: signup.teamId,
+        teamPosition: signup.teamPosition,
+        positionOrder: signup.positionOrder,
+        canSubstitute: signup.canSubstitute,
+      },
+    ];
+  });
 }
 
 export async function getProfileForUser(userId: number) {
-  const profile = await prisma.playerProfile.findUnique({ where: { userId } });
-  return profile ? playerFrom(profile) : null;
+  return playerCardByUserId(userId);
 }
 
-export async function signupForMatch(matchId: number, userId: number) {
+/** 报名时可覆盖的位置/补位选项，缺省沿用个人主页设置。 */
+export type SignupOptions = {
+  mainPosition?: string;
+  subPosition?: string;
+  canSubstitute?: boolean;
+};
+
+export async function signupForMatch(matchId: number, userId: number, options: SignupOptions = {}) {
   const match = await prisma.match.findUnique({ where: { id: matchId } });
   if (!match) return { kind: "not_found" as const };
-  if (match.status === "FINISHED") return { kind: "closed" as const };
+  if (match.status !== "CREATED") return { kind: "closed" as const };
+
+  const [profile, user] = await Promise.all([
+    prisma.playerProfile.findUnique({ where: { userId } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { username: true } }),
+  ]);
 
   try {
     await prisma.$transaction([
-      prisma.matchSignup.create({ data: { matchId, userId } }),
+      prisma.matchSignup.create({
+        data: {
+          matchId,
+          userId,
+          displayName: profile?.name || user?.username || "",
+          mainPosition: options.mainPosition ?? profile?.mainPosition ?? "FILL",
+          subPosition: options.subPosition ?? profile?.subPosition ?? "FILL",
+          rankAtSignup: profile?.rank ?? "",
+          canSubstitute: options.canSubstitute ?? false,
+        },
+      }),
       prisma.match.update({ where: { id: matchId }, data: { playerCount: { increment: 1 } } }),
     ]);
     return { kind: "ok" as const };
