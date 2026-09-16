@@ -42,19 +42,19 @@ model User {
 }
 
 model PlayerProfile {
-  id           Int    @id @default(autoincrement())
-  userId       Int    @unique
+  id           Int     @id @default(autoincrement())
+  userId       Int     @unique
   name         String
   gameName     String
-  mainPosition String @default("FILL")
-  subPosition  String @default("FILL")
-  rank         String @default("")
-  bio          String @default("")
-  avatar       String @default("")
+  mainPosition String  @default("FILL")
+  subPosition  String  @default("FILL")
+  rank         String  @default("")
+  bio          String  @default("")
+  avatar       String  @default("")
   /// Riot 账号唯一标识（LCU /lol-summoner/v1/current-summoner 的 puuid）。
   /// 昵称可改、Riot ID 格式也变过，只有 puuid 能稳定地把战绩对到人。
-  puuid        String @default("")
-  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  puuid        String? @unique
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Match {

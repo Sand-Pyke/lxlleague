@@ -1,5 +1,7 @@
 import type { MatchGameRecord, PlayerProfile, User } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { ApiError } from "@/server/api";
 
 /**
  * 对局战绩的写入与聚合（迁移自原 Flask 服务的 MatchResult 相关接口与
@@ -243,64 +245,93 @@ export async function upsertGameRecords(input: {
   gameNoExplicit: boolean;
   playedAt: Date;
   rows: ImportedRow[];
+  puuidUpdates?: Array<{ userId: number; puuid: string }>;
 }) {
-  let created = 0;
-  let updated = 0;
-
-  // 自动排位只算一次：循环里逐行算的话，第一行插入后 max 就变了，后面每行都会再 +1。
-  let autoGameNo = input.gameNo;
-  if (!input.gameNoExplicit && input.matchId > 0) {
-    const last = await prisma.matchGameRecord.findFirst({
-      where: { matchId: input.matchId, roundNo: input.roundNo },
-      orderBy: { gameNo: "desc" },
-      select: { gameNo: true },
-    });
-    autoGameNo = (last?.gameNo ?? 0) + 1;
-  }
-
-  for (const row of input.rows) {
-    const data = {
-      matchId: input.matchId > 0 ? input.matchId : null,
-      champion: row.champion,
-      result: row.result,
-      kills: row.kills,
-      deaths: row.deaths,
-      assists: row.assists,
-      isMvp: row.isMvp,
-      isSvp: row.isSvp,
-      teamRank: row.teamRank,
-      level: row.level,
-      cs: row.cs,
-      gold: row.gold,
-      vision: row.vision,
-      items: row.items,
-      playedAt: input.playedAt,
-    };
-
-    const existing = await prisma.matchGameRecord.findUnique({
-      where: { sourceGameId_userId: { sourceGameId: input.sourceGameId, userId: row.userId } },
-      select: { id: true },
-    });
-    if (existing) {
-      // 重复上传只刷新数据，**不动 gameNo / roundNo**：那是首次导入定下的槽位，
-      // 否则 agent 重扫时会把已经排好的第 N 局重新算成别的局数。
-      await prisma.matchGameRecord.update({ where: { id: existing.id }, data });
-      updated += 1;
-    } else {
-      await prisma.matchGameRecord.create({
-        data: {
-          ...data,
-          userId: row.userId,
-          sourceGameId: input.sourceGameId,
-          gameNo: input.gameNoExplicit ? input.gameNo : autoGameNo,
-          roundNo: input.roundNo,
-        },
+  return prisma.$transaction(
+    async (tx) => {
+      let created = 0;
+      let updated = 0;
+      const userIds = input.rows.map((row) => row.userId);
+      const existingRecords = await tx.matchGameRecord.findMany({
+        where: { sourceGameId: input.sourceGameId, userId: { in: userIds } },
+        select: { id: true, userId: true, matchId: true, roundNo: true, gameNo: true },
       });
-      created += 1;
-    }
-  }
+      const existingByUser = new Map(existingRecords.map((record) => [record.userId, record]));
+      for (const record of existingRecords) {
+        if (record.matchId !== input.matchId || record.roundNo !== input.roundNo) {
+          throw new ApiError(409, "同一来源对局已归属到其他赛事或轮次");
+        }
+      }
 
-  return { created, updated, gameNo: autoGameNo };
+      const existingSlots = new Set(existingRecords.map((record) => record.gameNo));
+      if (existingSlots.size > 1) {
+        throw new ApiError(409, "同一来源对局存在不一致的局号");
+      }
+
+      let resolvedGameNo = existingRecords[0]?.gameNo ?? input.gameNo;
+      if (!resolvedGameNo) {
+        const last = await tx.matchGameRecord.findFirst({
+          where: { matchId: input.matchId, roundNo: input.roundNo },
+          orderBy: { gameNo: "desc" },
+          select: { gameNo: true },
+        });
+        resolvedGameNo = (last?.gameNo ?? 0) + 1;
+      }
+
+      if (input.gameNoExplicit && existingRecords.length && resolvedGameNo !== input.gameNo) {
+        throw new ApiError(409, "同一来源对局已使用不同局号导入");
+      }
+
+      for (const binding of input.puuidUpdates ?? []) {
+        await tx.playerProfile.updateMany({
+          where: { userId: binding.userId, puuid: null },
+          data: { puuid: binding.puuid },
+        });
+      }
+
+      for (const row of input.rows) {
+        const data = {
+          matchId: input.matchId > 0 ? input.matchId : null,
+          champion: row.champion,
+          result: row.result,
+          kills: row.kills,
+          deaths: row.deaths,
+          assists: row.assists,
+          isMvp: row.isMvp,
+          isSvp: row.isSvp,
+          teamRank: row.teamRank,
+          level: row.level,
+          cs: row.cs,
+          gold: row.gold,
+          vision: row.vision,
+          items: row.items,
+          playedAt: input.playedAt,
+        };
+
+        const existing = existingByUser.get(row.userId);
+        if (existing) {
+          // 重复上传只刷新数据，**不动 gameNo / roundNo**：那是首次导入定下的槽位，
+          // 否则 agent 重扫时会把已经排好的第 N 局重新算成别的局数。
+          await tx.matchGameRecord.update({ where: { id: existing.id }, data });
+          updated += 1;
+        } else {
+          await tx.matchGameRecord.create({
+            data: {
+              ...data,
+              userId: row.userId,
+              sourceGameId: input.sourceGameId,
+              gameNo: resolvedGameNo,
+              roundNo: input.roundNo,
+            },
+          });
+          created += 1;
+        }
+      }
+
+      return { created, updated, gameNo: resolvedGameNo };
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
 }
 
 export async function listMatchRecords(matchId: number) {

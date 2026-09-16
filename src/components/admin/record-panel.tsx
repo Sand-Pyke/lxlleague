@@ -204,6 +204,11 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
     }
   }
 
+  function agentCommand() {
+    const api = window.location.origin;
+    return `$env:LXL_IMPORT_TOKEN = \"${importToken}\"; node scripts/lcu-agent.mjs --api \"${api}\"`;
+  }
+
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -669,15 +674,14 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
           <Space wrap>
             <span>启动 agent：</span>
             <Typography.Text code>
-              node scripts/lcu-agent.mjs --token{" "}
-              {tokenVisible && importToken ? importToken : "<令牌>"}
+              $env:LXL_IMPORT_TOKEN = "&lt;令牌&gt;"; node scripts/lcu-agent.mjs --api
+              "&lt;本站地址&gt;"
             </Typography.Text>
             <Button
               size="small"
               icon={<CopyOutlined />}
-              onClick={() =>
-                void copyText(`node scripts/lcu-agent.mjs --token ${importToken}`, "启动命令已复制")
-              }
+              disabled={!importToken}
+              onClick={() => void copyText(agentCommand(), "启动命令已复制")}
             >
               复制命令
             </Button>

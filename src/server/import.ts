@@ -54,19 +54,36 @@ export async function importContext(request: NextRequest) {
   try {
     await requireImporter(request);
 
-    // 优先取进行中的赛事；没有就退到最近创建的一场，方便先联调。
-    const match =
-      (await prisma.match.findFirst({ where: { status: "LIVE" }, orderBy: { id: "desc" } })) ??
-      (await prisma.match.findFirst({ orderBy: { id: "desc" } }));
+    // Never fall back to a CREATED match: the agent is long-running and an
+    // accidental import is much more costly than requiring an admin to mark a
+    // match as LIVE first.
+    const match = await prisma.match.findFirst({
+      where: { status: "LIVE" },
+      orderBy: { id: "desc" },
+    });
 
-    const users = await prisma.user.findMany({
-      where: { status: "APPROVED" },
-      select: {
-        id: true,
-        username: true,
-        profile: { select: { gameName: true, puuid: true } },
-      },
-      orderBy: { id: "asc" },
+    const signups = match
+      ? await prisma.matchSignup.findMany({
+          where: { matchId: match.id, user: { is: { status: "APPROVED" } } },
+          select: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                profile: { select: { gameName: true, puuid: true } },
+              },
+            },
+          },
+          orderBy: { id: "asc" },
+        })
+      : [];
+
+    const users = signups.map((signup) => signup.user);
+    const playerIds = new Set<number>();
+    const players = users.flatMap((user) => {
+      if (playerIds.has(user.id)) return [];
+      playerIds.add(user.id);
+      return [user];
     });
 
     return json({
@@ -80,7 +97,7 @@ export async function importContext(request: NextRequest) {
             bo: match.bo,
           }
         : null,
-      players: users.map((user) => ({
+      players: players.map((user) => ({
         userId: user.id,
         username: user.username,
         gameName: user.profile?.gameName ?? "",
@@ -103,23 +120,50 @@ export async function importRecords(request: NextRequest) {
 
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const sourceGameId = String(body.sourceGameId ?? "").trim();
-    if (!sourceGameId) throw new ApiError(400, "缺少 sourceGameId（LCU 的 gameId），无法做幂等");
+    if (!sourceGameId || sourceGameId.length > 128) {
+      throw new ApiError(400, "sourceGameId 无效");
+    }
 
     const rawRows = Array.isArray(body.rows) ? body.rows : [];
     if (!rawRows.length) throw new ApiError(400, "rows 为空");
     if (rawRows.length > 10) throw new ApiError(400, "一局最多 10 名玩家");
 
-    const matchId = Number(body.matchId ?? 0) > 0 ? Number(body.matchId) : 0;
-    const match = matchId > 0 ? await prisma.match.findUnique({ where: { id: matchId } }) : null;
-    if (matchId > 0 && !match) throw new ApiError(404, "赛事不存在");
+    const matchId = Number(body.matchId ?? 0);
+    if (!Number.isInteger(matchId) || matchId < 1) throw new ApiError(400, "缺少有效赛事 ID");
+    const match = await prisma.match.findUnique({ where: { id: matchId } });
+    if (!match) throw new ApiError(404, "赛事不存在");
+    if (match.status !== "LIVE") throw new ApiError(409, "仅能向进行中的赛事导入战绩");
 
-    const roundNo = Number(body.roundNo ?? match?.currentRound ?? 1) || 1;
+    const roundNo = Number(body.roundNo ?? match.currentRound);
+    if (!Number.isInteger(roundNo) || roundNo < 1 || roundNo !== match.currentRound) {
+      throw new ApiError(409, "赛事轮次已变化，请刷新导入上下文后重试");
+    }
     // 不传 gameNo 就由服务端自动排到该赛事的下一个空位（agent 不知道这是 BO5 的第几局）。
-    const gameNo = Number(body.gameNo ?? 0) || 0;
+    const requestedGameNo = body.gameNo === undefined ? 0 : Number(body.gameNo);
+    if (
+      requestedGameNo &&
+      (!Number.isInteger(requestedGameNo) || requestedGameNo < 1 || requestedGameNo > 99)
+    ) {
+      throw new ApiError(400, "局号无效");
+    }
+    const gameNo = requestedGameNo || 0;
     const playedAt = body.playedAt ? new Date(String(body.playedAt)) : new Date();
+    if (Number.isNaN(playedAt.getTime())) throw new ApiError(400, "对局时间无效");
+
+    const signedUserIds = new Set(
+      (
+        await prisma.matchSignup.findMany({
+          where: { matchId },
+          select: { userId: true },
+        })
+      ).map((signup) => signup.userId),
+    );
+    if (!signedUserIds.size) throw new ApiError(409, "该赛事没有报名选手，拒绝自动导入");
 
     const errors: string[] = [];
     const rows = [];
+    const puuidUpdates: Array<{ userId: number; puuid: string }> = [];
+    const seenUserIds = new Set<number>();
 
     for (const [index, raw] of rawRows.entries()) {
       const line = index + 1;
@@ -128,20 +172,32 @@ export async function importRecords(request: NextRequest) {
       // 玩家匹配：本站 id > puuid > 游戏ID（召唤师名）。
       const rowPuuid = String(source.puuid ?? "").trim();
       let userId = Number(source.user_id ?? source.userId ?? 0) || 0;
+      let profile = userId
+        ? await prisma.playerProfile.findUnique({
+            where: { userId },
+            select: { userId: true, puuid: true },
+          })
+        : null;
       if (!userId && rowPuuid) {
-        const profile = await prisma.playerProfile.findFirst({
+        profile = await prisma.playerProfile.findUnique({
           where: { puuid: rowPuuid },
-          select: { userId: true },
+          select: { userId: true, puuid: true },
         });
         userId = profile?.userId ?? 0;
       }
       if (!userId) {
         const gameName = String(source.game_name ?? source.gameName ?? "").trim();
         if (gameName) {
-          const profile = await prisma.playerProfile.findFirst({
+          const profiles = await prisma.playerProfile.findMany({
             where: { gameName: { equals: gameName, mode: "insensitive" } },
-            select: { userId: true },
+            select: { userId: true, puuid: true },
+            take: 2,
           });
+          if (profiles.length > 1) {
+            errors.push(`第${line}行：游戏 ID 匹配到多个选手，请先消除重名`);
+            continue;
+          }
+          profile = profiles[0] ?? null;
           userId = profile?.userId ?? 0;
         }
       }
@@ -149,22 +205,29 @@ export async function importRecords(request: NextRequest) {
         errors.push(`第${line}行：匹配不到玩家（puuid/游戏ID 都对不上本站账号）`);
         continue;
       }
+      if (!signedUserIds.has(userId)) {
+        errors.push(`第${line}行：该选手未报名当前赛事，拒绝导入`);
+        continue;
+      }
+      if (seenUserIds.has(userId)) {
+        errors.push(`第${line}行：同一选手在一局中出现多次`);
+        continue;
+      }
+      if (rowPuuid && profile?.puuid && profile.puuid !== rowPuuid) {
+        errors.push(`第${line}行：PUUID 与本站已绑定账号不一致`);
+        continue;
+      }
 
       // 配对成功后顺手把 puuid 记到资料上：第一次靠召唤师名对上，之后改名也不怕。
       // 只在资料里还没有 puuid 时写入，不覆盖已有的，避免脏数据把老映射顶掉。
-      if (rowPuuid) {
-        await prisma.playerProfile.updateMany({
-          where: { userId, puuid: "" },
-          data: { puuid: rowPuuid },
-        });
-      }
-
       const normalized = normalizeImportedRow({ ...source, user_id: userId });
       if (!normalized) {
         errors.push(`第${line}行：英雄或胜负缺失`);
         continue;
       }
       rows.push(normalized);
+      seenUserIds.add(userId);
+      if (rowPuuid && !profile?.puuid) puuidUpdates.push({ userId, puuid: rowPuuid });
     }
 
     if (!rows.length) {
@@ -183,6 +246,7 @@ export async function importRecords(request: NextRequest) {
       gameNoExplicit: gameNo > 0,
       playedAt,
       rows,
+      puuidUpdates,
     });
 
     // 纯重复上传（agent 重扫）时不要报「第 N 局」——那一轮什么都没新建，
