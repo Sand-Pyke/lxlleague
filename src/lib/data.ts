@@ -31,14 +31,3 @@ export type Match = {
   score: [number, number];
   round: string;
 };
-
-export const players: Player[] = [];
-export const matches: Match[] = [];
-
-export function getMatch(id: number): Match | undefined {
-  return matches.find((match) => match.id === id);
-}
-
-export function leaderboard(): Player[] {
-  return [...players].sort((a, b) => b.winRate - a.winRate || b.kda - a.kda);
-}

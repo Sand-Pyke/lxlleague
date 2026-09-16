@@ -3,9 +3,17 @@
 import { TeamOutlined } from "@ant-design/icons";
 import { Avatar, Card, Col, Empty, Row, Statistic, Tag, Typography } from "antd";
 import { LeagueShell } from "@/components/app-shell";
-import { players } from "@/lib/data";
+import type { Player } from "@/lib/data";
+import { useEffect, useState } from "react";
 
 export default function PlayersPage() {
+  const [players, setPlayers] = useState<Player[]>([]);
+  useEffect(() => {
+    fetch("/api/players")
+      .then((response) => response.json())
+      .then((data) => setPlayers(data.players ?? []))
+      .catch(() => setPlayers([]));
+  }, []);
   return (
     <LeagueShell>
       <section className="page-title">

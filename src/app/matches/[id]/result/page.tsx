@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LeagueShell } from "@/components/app-shell";
-import { getMatch, players } from "@/lib/data";
+import { getMatchPageData } from "@/server/matches";
+
+export const dynamic = "force-dynamic";
 
 export default async function Result({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const match = getMatch(Number(id));
+  const { match, players } = await getMatchPageData(Number(id));
   if (!match) notFound();
   return (
     <LeagueShell>

@@ -3,9 +3,18 @@
 import { SafetyCertificateOutlined, TeamOutlined, TrophyOutlined } from "@ant-design/icons";
 import { Card, Col, Empty, Row, Statistic, Typography } from "antd";
 import { LeagueShell } from "@/components/app-shell";
-import { matches, players } from "@/lib/data";
+import { useEffect, useState } from "react";
 
 export default function AdminPage() {
+  const [summary, setSummary] = useState({ matches: 0, players: 0 });
+  useEffect(() => {
+    fetch("/api/home/board")
+      .then((response) => response.json())
+      .then((data) =>
+        setSummary({ matches: data.total_matches ?? 0, players: data.total_players ?? 0 }),
+      )
+      .catch(() => undefined);
+  }, []);
   return (
     <LeagueShell>
       <section className="page-title">
@@ -16,12 +25,12 @@ export default function AdminPage() {
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}>
           <Card className="antd-panel">
-            <Statistic title="赛事总数" value={matches.length} prefix={<TrophyOutlined />} />
+            <Statistic title="赛事总数" value={summary.matches} prefix={<TrophyOutlined />} />
           </Card>
         </Col>
         <Col xs={24} md={8}>
           <Card className="antd-panel">
-            <Statistic title="选手总数" value={players.length} prefix={<TeamOutlined />} />
+            <Statistic title="选手总数" value={summary.players} prefix={<TeamOutlined />} />
           </Card>
         </Col>
         <Col xs={24} md={8}>

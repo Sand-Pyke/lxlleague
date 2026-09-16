@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
-import { leaderboard, matches, players } from "@/lib/data";
+import { getHomeData } from "@/lib/repository";
 
-export function getHomeBoard() {
+export async function getHomeBoard() {
+  const { matches, players } = await getHomeData();
   return NextResponse.json({
     today: matches.filter((match) => match.status !== "FINISHED"),
-    ranking: leaderboard().slice(0, 5),
+    ranking: players.slice(0, 5),
     total_players: players.length,
+    total_matches: matches.length,
   });
 }

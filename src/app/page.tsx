@@ -10,10 +10,23 @@ import { Button, Card, Col, Empty, Row, Space, Statistic, Typography } from "ant
 import Link from "next/link";
 import { LeagueShell, Status } from "@/components/app-shell";
 import { MatchCard } from "@/components/match-card";
-import { leaderboard, matches, players } from "@/lib/data";
+import type { Match, Player } from "@/lib/data";
+import { useEffect, useState } from "react";
 
 export default function Home() {
-  const leaders = leaderboard().slice(0, 5);
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
+
+  useEffect(() => {
+    Promise.all([fetch("/api/match/list"), fetch("/api/players")])
+      .then(async ([matchesResponse, playersResponse]) => {
+        if (matchesResponse.ok) setMatches((await matchesResponse.json()).match_list ?? []);
+        if (playersResponse.ok) setPlayers((await playersResponse.json()).players ?? []);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const leaders = players.slice(0, 5);
   const recentMatch = matches.find((match) => match.status === "FINISHED");
   const finishedMatchCount = matches.filter((match) => match.status === "FINISHED").length;
   const activeMatchCount = matches.filter((match) => match.status === "LIVE").length;

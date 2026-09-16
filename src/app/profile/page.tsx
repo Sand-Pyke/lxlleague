@@ -5,18 +5,23 @@ import { Avatar, Button, Card, Empty, Space, Spin, Typography } from "antd";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { LeagueShell } from "@/components/app-shell";
-import { players } from "@/lib/data";
+import type { Player } from "@/lib/data";
 
 type CurrentUser = { login: boolean; username?: string };
 
 export default function ProfilePage() {
   const [user, setUser] = useState<CurrentUser | null>(null);
-  const player = players[0];
+  const [player, setPlayer] = useState<Player | null>(null);
 
   useEffect(() => {
     fetch("/api/current_user")
       .then((response) => response.json())
-      .then(setUser)
+      .then(async (currentUser) => {
+        setUser(currentUser);
+        if (!currentUser.login) return;
+        const response = await fetch("/api/user/profile");
+        if (response.ok) setPlayer((await response.json()).user ?? null);
+      })
       .catch(() => setUser({ login: false }));
   }, []);
 

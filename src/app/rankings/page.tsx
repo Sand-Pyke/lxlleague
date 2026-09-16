@@ -5,10 +5,16 @@ import { Avatar, Card, Empty, Table, Tag, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import { LeagueShell } from "@/components/app-shell";
 import type { Player } from "@/lib/data";
-import { leaderboard } from "@/lib/data";
+import { useEffect, useState } from "react";
 
 export default function RankingsPage() {
-  const list = leaderboard();
+  const [list, setList] = useState<Player[]>([]);
+  useEffect(() => {
+    fetch("/api/players")
+      .then((response) => response.json())
+      .then((data) => setList(data.players ?? []))
+      .catch(() => setList([]));
+  }, []);
   const columns: TableColumnsType<Player> = [
     {
       title: "排名",
