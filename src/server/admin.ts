@@ -8,6 +8,7 @@ import {
 } from "@/lib/admin-options";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { randomBytes } from "node:crypto";
 import { ApiError, badRequest, notFound } from "@/server/api";
 import { isPosition, matchBudget, rankFee, signRank } from "@/server/roster";
 import { listMatchRecords } from "@/server/records";
@@ -308,6 +309,28 @@ export async function setUserAdmin(userId: number, isAdmin: boolean) {
   if (!user) throw badRequest("用户不存在");
   await prisma.user.update({ where: { id: userId }, data: { isAdmin } });
   return { msg: `已将 ${user.username} ${isAdmin ? "设为管理员" : "取消管理员"}` };
+}
+
+/** 读取当前管理员自己的导入令牌（LCU agent 用）。 */
+export async function importToken(adminId: number) {
+  const user = await prisma.user.findUnique({
+    where: { id: adminId },
+    select: { importToken: true },
+  });
+  if (!user) throw notFound("用户不存在");
+  return { token: user.importToken };
+}
+
+/** 重新生成导入令牌：旧令牌立即失效。 */
+export async function rotateImportToken(adminId: number) {
+  const user = await prisma.user.findUnique({
+    where: { id: adminId },
+    select: { username: true },
+  });
+  if (!user) throw notFound("用户不存在");
+  const token = randomBytes(24).toString("base64url");
+  await prisma.user.update({ where: { id: adminId }, data: { importToken: token } });
+  return { token, msg: `导入令牌已重置，旧令牌立即失效` };
 }
 
 /** 删除用户：先清报名并同步各赛事人数，再删账号（资料/战绩随外键级联删除）。 */

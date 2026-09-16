@@ -42,45 +42,48 @@ model User {
 }
 
 model PlayerProfile {
-  id       Int    @id @default(autoincrement())
-  userId   Int    @unique
-  name     String
-  gameName String
+  id           Int    @id @default(autoincrement())
+  userId       Int    @unique
+  name         String
+  gameName     String
   mainPosition String @default("FILL")
   subPosition  String @default("FILL")
   rank         String @default("")
-  bio      String @default("")
+  bio          String @default("")
   avatar       String @default("")
+  /// Riot 账号唯一标识（LCU /lol-summoner/v1/current-summoner 的 puuid）。
+  /// 昵称可改、Riot ID 格式也变过，只有 puuid 能稳定地把战绩对到人。
+  puuid        String @default("")
   user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Match {
-  id          Int          @id @default(autoincrement())
-  name        String
-  date        DateTime
-  status      MatchStatus  @default(CREATED)
-  bo          String       @default("BO3")
-  playerCount Int          @default(0)
-  teamCount   Int          @default(2)
-  blueTeam    String       @default("蓝色方")
-  redTeam     String       @default("红色方")
-  blueScore   Int          @default(0)
-  redScore    Int          @default(0)
-  round       String       @default("常规赛")
-  liveUrl      String       @default("")
-  useFee       Boolean      @default(true)
-  currentRound Int          @default(1)
+  id           Int               @id @default(autoincrement())
+  name         String
+  date         DateTime
+  status       MatchStatus       @default(CREATED)
+  bo           String            @default("BO3")
+  playerCount  Int               @default(0)
+  teamCount    Int               @default(2)
+  blueTeam     String            @default("蓝色方")
+  redTeam      String            @default("红色方")
+  blueScore    Int               @default(0)
+  redScore     Int               @default(0)
+  round        String            @default("常规赛")
+  liveUrl      String            @default("")
+  useFee       Boolean           @default(true)
+  currentRound Int               @default(1)
   teamOneId    Int?
   teamTwoId    Int?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  signups     MatchSignup[]
-  teams       Team[]
-  teamOne     Team?       @relation("MatchTeamOne", fields: [teamOneId], references: [id], onDelete: SetNull)
-  teamTwo     Team?       @relation("MatchTeamTwo", fields: [teamTwoId], references: [id], onDelete: SetNull)
-  rounds      MatchRound[]
-  scores      MatchScore[]
-  gameRecords MatchGameRecord[]
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  signups      MatchSignup[]
+  teams        Team[]
+  teamOne      Team?             @relation("MatchTeamOne", fields: [teamOneId], references: [id], onDelete: SetNull)
+  teamTwo      Team?             @relation("MatchTeamTwo", fields: [teamTwoId], references: [id], onDelete: SetNull)
+  rounds       MatchRound[]
+  scores       MatchScore[]
+  gameRecords  MatchGameRecord[]
 }
 
 model MatchSignup {
@@ -106,19 +109,19 @@ model MatchSignup {
 }
 
 model Team {
-  id          Int               @id @default(autoincrement())
-  matchId     Int
-  name        String
-  createdAt   DateTime          @default(now())
-  match       Match             @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  signups     MatchSignup[]
-  roundsAsOne MatchRound[]      @relation("RoundTeamOne")
-  roundsAsTwo MatchRound[]      @relation("RoundTeamTwo")
-  scoresAsOne MatchScore[]      @relation("ScoreTeamOne")
-  scoresAsTwo MatchScore[]      @relation("ScoreTeamTwo")
-  gameRecords MatchGameRecord[]
-  matchesAsOne Match[]          @relation("MatchTeamOne")
-  matchesAsTwo Match[]          @relation("MatchTeamTwo")
+  id           Int               @id @default(autoincrement())
+  matchId      Int
+  name         String
+  createdAt    DateTime          @default(now())
+  match        Match             @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  signups      MatchSignup[]
+  roundsAsOne  MatchRound[]      @relation("RoundTeamOne")
+  roundsAsTwo  MatchRound[]      @relation("RoundTeamTwo")
+  scoresAsOne  MatchScore[]      @relation("ScoreTeamOne")
+  scoresAsTwo  MatchScore[]      @relation("ScoreTeamTwo")
+  gameRecords  MatchGameRecord[]
+  matchesAsOne Match[]           @relation("MatchTeamOne")
+  matchesAsTwo Match[]           @relation("MatchTeamTwo")
 
   @@unique([matchId, name])
   @@index([matchId])
@@ -156,31 +159,36 @@ model MatchScore {
 }
 
 model MatchGameRecord {
-  id        Int       @id @default(autoincrement())
-  userId    Int
-  matchId   Int?
-  teamId    Int?
-  champion  String
-  result    String
-  kills     Int       @default(0)
-  deaths    Int       @default(0)
-  assists   Int       @default(0)
-  isMvp     Boolean   @default(false)
-  isSvp     Boolean   @default(false)
-  teamRank  Int       @default(0)
-  level     Int       @default(0)
-  cs        Int       @default(0)
-  gold      Int       @default(0)
-  vision    Int       @default(0)
-  items     String    @default("")
-  gameNo    Int       @default(1)
-  roundNo   Int       @default(1)
-  playedAt  DateTime?
-  createdAt DateTime  @default(now())
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  match     Match?    @relation(fields: [matchId], references: [id], onDelete: SetNull)
-  team      Team?     @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  id           Int       @id @default(autoincrement())
+  userId       Int
+  matchId      Int?
+  teamId       Int?
+  champion     String
+  result       String
+  kills        Int       @default(0)
+  deaths       Int       @default(0)
+  assists      Int       @default(0)
+  isMvp        Boolean   @default(false)
+  isSvp        Boolean   @default(false)
+  teamRank     Int       @default(0)
+  level        Int       @default(0)
+  cs           Int       @default(0)
+  gold         Int       @default(0)
+  vision       Int       @default(0)
+  items        String    @default("")
+  gameNo       Int       @default(1)
+  roundNo      Int       @default(1)
+  playedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  /// 来源对局 ID（LCU 的 gameId）。手工录入为 null，自动导入用于幂等去重；
+  /// Postgres 的唯一索引把多个 NULL 视为互不相同，因此手工录入不会互相冲突。
+  sourceGameId String?
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match        Match?    @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  team         Team?     @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
+  /// 同一局里一个玩家只能有一条记录，自动导入靠它做 upsert。
+  @@unique([sourceGameId, userId])
   @@index([matchId, roundNo, gameNo])
   @@index([userId, playedAt])
 }

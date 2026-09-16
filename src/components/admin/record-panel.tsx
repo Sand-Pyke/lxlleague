@@ -1,6 +1,12 @@
 "use client";
 
-import { DeleteOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import {
+  CopyOutlined,
+  DeleteOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  SyncOutlined,
+} from "@ant-design/icons";
 import {
   Alert,
   Button,
@@ -157,6 +163,47 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
   const [editTarget, setEditTarget] = useState<RecordRow | null>(null);
   const [editDraft, setEditDraft] = useState<RowDraft | null>(null);
 
+  // 自动导入（LCU agent）用的令牌：只存在管理员自己身上，可重置。
+  const [importToken, setImportToken] = useState("");
+  const [tokenVisible, setTokenVisible] = useState(false);
+  const [tokenBusy, setTokenBusy] = useState(false);
+
+  const loadImportToken = useCallback(async () => {
+    try {
+      const data = await getJson("/api/admin/import/token");
+      setImportToken(String(data.token ?? ""));
+    } catch {
+      setImportToken("");
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadImportToken();
+  }, [loadImportToken]);
+
+  async function rotateImportToken() {
+    setTokenBusy(true);
+    try {
+      const data = await postJson("/api/admin/import/token", {});
+      setImportToken(String(data.token ?? ""));
+      setTokenVisible(true);
+      message.success(successText(data, "导入令牌已重置"));
+    } catch (requestError) {
+      message.error(errorText(requestError, "重置失败"));
+    } finally {
+      setTokenBusy(false);
+    }
+  }
+
+  async function copyText(text: string, tip: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      message.success(tip);
+    } catch {
+      message.warning("复制失败，请手动选中复制");
+    }
+  }
+
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -298,7 +345,12 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
       render: (_, row) => (
         <Space size={4}>
           {championIcon(row.champion) ? (
-            <img className="record-hero" src={championIcon(row.champion)} alt="" title={row.champion} />
+            <img
+              className="record-hero"
+              src={championIcon(row.champion)}
+              alt=""
+              title={row.champion}
+            />
           ) : null}
           <Input
             size="small"
@@ -478,7 +530,9 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
       width: 110,
       render: (_, row) => (
         <Space size={4}>
-          <Tag color={row.result === "win" ? "green" : "red"}>{row.result === "win" ? "胜" : "负"}</Tag>
+          <Tag color={row.result === "win" ? "green" : "red"}>
+            {row.result === "win" ? "胜" : "负"}
+          </Tag>
           {row.is_mvp ? <Tag color="gold">MVP</Tag> : null}
           {row.is_svp ? <Tag color="purple">SVP</Tag> : null}
         </Space>
@@ -568,6 +622,82 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
       <Card
         className="antd-panel"
         size="small"
+        title="自动导入（LCU Agent）"
+        extra={<Tag color="blue">推荐</Tag>}
+      >
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 10 }}>
+          在<Typography.Text strong>装了英雄联盟客户端的那台机器</Typography.Text>
+          上跑一次 agent，它连本机客户端（LCU）抓取对局并自动写入。
+          一局结束就自动导入，不需要再手工填表；MVP / SVP /
+          队内名次留到下面「已录入战绩」的编辑弹窗里勾选。 注意 LCU 只监听本机，所以 agent
+          必须跑在裁判/房主那台机器上。
+        </Typography.Paragraph>
+        <Space orientation="vertical" size={8} style={{ width: "100%" }}>
+          <Space wrap>
+            <span>导入令牌：</span>
+            <Typography.Text code style={{ maxWidth: 420, display: "inline-block" }}>
+              {importToken
+                ? tokenVisible
+                  ? importToken
+                  : "•".repeat(Math.min(importToken.length, 32))
+                : "读取中…"}
+            </Typography.Text>
+            <Button size="small" onClick={() => setTokenVisible((value) => !value)}>
+              {tokenVisible ? "隐藏" : "显示"}
+            </Button>
+            <Button
+              size="small"
+              icon={<CopyOutlined />}
+              disabled={!importToken}
+              onClick={() => void copyText(importToken, "令牌已复制")}
+            >
+              复制
+            </Button>
+            <Popconfirm
+              title="重置导入令牌？"
+              description="旧令牌会立即失效，正在运行的 agent 需要换上新令牌。"
+              okText="重置"
+              okButtonProps={{ danger: true }}
+              cancelText="取消"
+              onConfirm={() => void rotateImportToken()}
+            >
+              <Button size="small" danger icon={<SyncOutlined />} loading={tokenBusy}>
+                重置
+              </Button>
+            </Popconfirm>
+          </Space>
+          <Space wrap>
+            <span>启动 agent：</span>
+            <Typography.Text code>
+              node scripts/lcu-agent.mjs --token{" "}
+              {tokenVisible && importToken ? importToken : "<令牌>"}
+            </Typography.Text>
+            <Button
+              size="small"
+              icon={<CopyOutlined />}
+              onClick={() =>
+                void copyText(`node scripts/lcu-agent.mjs --token ${importToken}`, "启动命令已复制")
+              }
+            >
+              复制命令
+            </Button>
+          </Space>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            联调可以加 <Typography.Text code>--probe</Typography.Text>（只诊断不上传）、
+            <Typography.Text code>--once</Typography.Text>（只扫一次）和{" "}
+            <Typography.Text code>--dry-run</Typography.Text>（只打印不上传）；不带参数则常驻轮询。
+          </Typography.Text>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            默认一局至少要有 2 名本站选手才导入，用来挡掉路人排位；确实是你们的比赛却被跳过时， 用{" "}
+            <Typography.Text code>--min-players 1</Typography.Text> 放宽， 或用{" "}
+            <Typography.Text code>--queues 0</Typography.Text> 限定只收自定义房。
+          </Typography.Text>
+        </Space>
+      </Card>
+
+      <Card
+        className="antd-panel"
+        size="small"
         title={`批量录入（最多 10 行）${matchId > 0 ? "" : " · 自由对局"}`}
         extra={
           <Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>
@@ -592,7 +722,13 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
           </span>
           <span>
             轮次{" "}
-            <InputNumber size="small" min={1} max={99} value={roundNo} onChange={(value) => setRoundNo(Number(value) || 1)} />
+            <InputNumber
+              size="small"
+              min={1}
+              max={99}
+              value={roundNo}
+              onChange={(value) => setRoundNo(Number(value) || 1)}
+            />
           </span>
           <span>
             日期{" "}
@@ -768,7 +904,9 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
                     min={0}
                     style={{ width: 72 }}
                     value={editDraft[field]}
-                    onChange={(value) => setEditDraft({ ...editDraft, [field]: Number(value) || 0 })}
+                    onChange={(value) =>
+                      setEditDraft({ ...editDraft, [field]: Number(value) || 0 })
+                    }
                   />
                 </span>
               ))}
@@ -789,7 +927,9 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
                     min={0}
                     style={{ width: 84 }}
                     value={editDraft[field]}
-                    onChange={(value) => setEditDraft({ ...editDraft, [field]: Number(value) || 0 })}
+                    onChange={(value) =>
+                      setEditDraft({ ...editDraft, [field]: Number(value) || 0 })
+                    }
                   />
                 </span>
               ))}

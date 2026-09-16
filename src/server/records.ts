@@ -183,6 +183,126 @@ export async function batchAddRecords(matchId: number, rows: unknown[]) {
   return { ok, errors };
 }
 
+/** 自动导入（LCU agent）需要的行结构：玩家用 userId / puuid / gameName 任一方式指定。 */
+export type ImportedRow = {
+  userId: number;
+  champion: string;
+  result: "win" | "lose";
+  kills: number;
+  deaths: number;
+  assists: number;
+  cs: number;
+  gold: number;
+  vision: number;
+  level: number;
+  items: string;
+  isMvp: boolean;
+  isSvp: boolean;
+  teamRank: number;
+};
+
+/** 把 agent 传来的原始行规范化成入库结构；英雄/胜负不完整时返回 null。 */
+export function normalizeImportedRow(raw: unknown): ImportedRow | null {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  const userId = asInt(row.user_id ?? row.userId);
+  const champion = String(row.champion ?? "").trim();
+  if (!userId || !champion) return null;
+  return {
+    userId,
+    champion: champion.slice(0, 50),
+    result: normalizeResult(row.result),
+    kills: asInt(row.kills),
+    deaths: asInt(row.deaths),
+    assists: asInt(row.assists),
+    cs: asInt(row.cs),
+    gold: asInt(row.gold),
+    vision: asInt(row.vision),
+    level: asInt(row.level),
+    items: normalizeItems(row.items),
+    isMvp: Boolean(row.is_mvp ?? row.isMvp),
+    isSvp: Boolean(row.is_svp ?? row.isSvp),
+    teamRank: asInt(row.team_rank ?? row.teamRank),
+    // 注意：MVP/SVP 与 teamRank 故意尊重 agent 的取值，但 agent 通常传 0/false，
+    // 赛后由管理员在「战绩录入」的编辑弹窗里补 —— 那里本来就能改这三个字段。
+  };
+}
+
+/**
+ * 自动导入整局战绩（LCU agent 专用）。
+ *
+ * 与 batchAddRecords 的关键差别是**幂等**：agent 会重复抓到同一局，
+ * 因此以 (sourceGameId, userId) 为键 upsert —— 这依赖迁移 202609160008 里
+ * 那个唯一索引，索引是完整的，所以 Prisma 生成的 ON CONFLICT 才能命中。
+ */
+export async function upsertGameRecords(input: {
+  sourceGameId: string;
+  matchId: number;
+  roundNo: number;
+  gameNo: number;
+  /** true = 调用方明确指定了 gameNo；false = 自动排到该赛事的下一个空位（agent 用）。 */
+  gameNoExplicit: boolean;
+  playedAt: Date;
+  rows: ImportedRow[];
+}) {
+  let created = 0;
+  let updated = 0;
+
+  // 自动排位只算一次：循环里逐行算的话，第一行插入后 max 就变了，后面每行都会再 +1。
+  let autoGameNo = input.gameNo;
+  if (!input.gameNoExplicit && input.matchId > 0) {
+    const last = await prisma.matchGameRecord.findFirst({
+      where: { matchId: input.matchId, roundNo: input.roundNo },
+      orderBy: { gameNo: "desc" },
+      select: { gameNo: true },
+    });
+    autoGameNo = (last?.gameNo ?? 0) + 1;
+  }
+
+  for (const row of input.rows) {
+    const data = {
+      matchId: input.matchId > 0 ? input.matchId : null,
+      champion: row.champion,
+      result: row.result,
+      kills: row.kills,
+      deaths: row.deaths,
+      assists: row.assists,
+      isMvp: row.isMvp,
+      isSvp: row.isSvp,
+      teamRank: row.teamRank,
+      level: row.level,
+      cs: row.cs,
+      gold: row.gold,
+      vision: row.vision,
+      items: row.items,
+      playedAt: input.playedAt,
+    };
+
+    const existing = await prisma.matchGameRecord.findUnique({
+      where: { sourceGameId_userId: { sourceGameId: input.sourceGameId, userId: row.userId } },
+      select: { id: true },
+    });
+    if (existing) {
+      // 重复上传只刷新数据，**不动 gameNo / roundNo**：那是首次导入定下的槽位，
+      // 否则 agent 重扫时会把已经排好的第 N 局重新算成别的局数。
+      await prisma.matchGameRecord.update({ where: { id: existing.id }, data });
+      updated += 1;
+    } else {
+      await prisma.matchGameRecord.create({
+        data: {
+          ...data,
+          userId: row.userId,
+          sourceGameId: input.sourceGameId,
+          gameNo: input.gameNoExplicit ? input.gameNo : autoGameNo,
+          roundNo: input.roundNo,
+        },
+      });
+      created += 1;
+    }
+  }
+
+  return { created, updated, gameNo: autoGameNo };
+}
+
 export async function listMatchRecords(matchId: number) {
   const records = await prisma.matchGameRecord.findMany({
     where: { matchId },
