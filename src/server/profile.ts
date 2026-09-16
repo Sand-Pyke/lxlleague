@@ -20,7 +20,7 @@ export async function getProfile(request: NextRequest) {
   const isSelf = viewer?.id === targetId;
   if (isSelf) await ensureProfile(targetId);
 
-  const [overview, cards] = await Promise.all([profileOverview(targetId), listPlayerCards()]);
+  const [overview, cards] = await Promise.all([profileOverview(targetId, isSelf), listPlayerCards()]);
   if (!overview) return NextResponse.json({ msg: "用户不存在" }, { status: 404 });
 
   const account = await prisma.user.findUnique({

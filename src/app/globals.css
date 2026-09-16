@@ -1612,7 +1612,9 @@ body {
 
 .players-card-link .player-antd-card {
   height: 100%;
-  transition: transform 0.16s ease, box-shadow 0.16s ease;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 .players-card-link:hover .player-antd-card {
@@ -2185,6 +2187,21 @@ body {
 .auth-card__content {
   display: flex;
   width: 100%;
+}
+
+.captcha-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  width: 100%;
+}
+
+.captcha-row .ant-input {
+  width: 100%;
+}
+
+.captcha-row .ant-btn {
+  white-space: nowrap;
 }
 
 .auth-emblem {

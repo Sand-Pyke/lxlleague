@@ -444,6 +444,7 @@ export type PlayerCard = ReturnType<typeof toPlayer>;
 export async function listPlayerCards() {
   const [profiles, records] = await Promise.all([
     prisma.playerProfile.findMany({
+      where: { user: { is: { isAdmin: false } } },
       include: {
         user: { select: { username: true, kookName: true, backgroundImage: true, status: true } },
       },
@@ -464,8 +465,8 @@ export async function listPlayerCards() {
 }
 
 export async function playerCardByUserId(userId: number) {
-  const profile = await prisma.playerProfile.findUnique({
-    where: { userId },
+  const profile = await prisma.playerProfile.findFirst({
+    where: { userId, user: { is: { isAdmin: false } } },
     include: { user: { select: { username: true, kookName: true, backgroundImage: true } } },
   });
   if (!profile) return null;
@@ -477,9 +478,9 @@ export async function playerCardByUserId(userId: number) {
 }
 
 /** 个人主页：统计 + 常用英雄 TOP3 + 全部对局历史（含参战率）。 */
-export async function profileOverview(userId: number) {
-  const profile = await prisma.playerProfile.findUnique({
-    where: { userId },
+export async function profileOverview(userId: number, includeAdmin = false) {
+  const profile = await prisma.playerProfile.findFirst({
+    where: includeAdmin ? { userId } : { userId, user: { is: { isAdmin: false } } },
     include: { user: { select: { username: true, kookName: true, backgroundImage: true } } },
   });
   if (!profile) return null;

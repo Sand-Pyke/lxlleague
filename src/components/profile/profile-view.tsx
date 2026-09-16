@@ -427,7 +427,7 @@ export function ProfileView() {
                     </span>
                   ) : null}
                   <span className="prof-ladder">
-                    LSPL 第 <b>{payload?.ranking || "-"}</b> 位选手
+                    LXL 第 <b>{payload?.ranking || "-"}</b> 位选手
                   </span>
                 </div>
               </div>

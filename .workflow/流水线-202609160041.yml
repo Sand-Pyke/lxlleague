@@ -1,6 +1,6 @@
 version: "1.0"
-name: build-and-deploy-lspl
-displayName: Build and deploy LSPL
+name: build-and-deploy-lxl
+displayName: Build and deploy LXL
 stages:
   - name: build
     displayName: Build release

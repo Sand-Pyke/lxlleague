@@ -4,8 +4,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "LSPL 峡谷冠军联赛",
-  description: "LSPL 峡谷冠军联赛赛事平台",
+  title: "LXL 峡谷冠军联赛",
+  description: "LXL 峡谷冠军联赛赛事平台",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -19,7 +19,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>("dark");
 
   useEffect(() => {
-    const savedMode = window.localStorage.getItem("lspl-theme") as ThemeMode | null;
+    const savedMode = window.localStorage.getItem("lxl-theme") as ThemeMode | null;
     const preferredMode = window.matchMedia("(prefers-color-scheme: dark)").matches
       ? "dark"
       : "light";
@@ -28,7 +28,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     document.documentElement.dataset.theme = mode;
-    window.localStorage.setItem("lspl-theme", mode);
+    window.localStorage.setItem("lxl-theme", mode);
   }, [mode]);
 
   const config = useMemo<ThemeConfig>(

@@ -47,7 +47,7 @@ export async function getMatchById(id: number) {
 export async function getMatchPlayers(matchId: number) {
   const [signups, records] = await Promise.all([
     prisma.matchSignup.findMany({
-      where: { matchId },
+      where: { matchId, user: { is: { isAdmin: false } } },
       orderBy: [{ positionOrder: "asc" }, { createdAt: "asc" }],
       include: {
         user: {

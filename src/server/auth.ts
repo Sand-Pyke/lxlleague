@@ -1,17 +1,70 @@
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { RANKS } from "@/lib/admin-options";
 
-const cookieName = "lspl_user_id";
+const cookieName = "lxl_user_id";
+const captchaCookieName = "lxl_captcha";
+const captchaLifetimeSeconds = 5 * 60;
+const captchaSecret =
+  process.env.CAPTCHA_SECRET || process.env.ADMIN_PASSWORD || "lxl-development-captcha-secret";
+
+function captchaSignature(payload: string) {
+  return createHmac("sha256", captchaSecret).update(payload).digest("base64url");
+}
+
+function captchaResponseError() {
+  return NextResponse.json(
+    { ok: false, code: "CAPTCHA_INVALID", error: "验证码错误或已过期，请重新获取" },
+    { status: 400 },
+  );
+}
+
+function isValidCaptcha(request: NextRequest, value: unknown) {
+  if (typeof value !== "string") return false;
+  const token = request.cookies.get(captchaCookieName)?.value;
+  if (!token) return false;
+
+  const [answer, expiresAt, nonce, signature] = token.split(".");
+  const expires = Number(expiresAt);
+  if (!answer || !nonce || !signature || !Number.isSafeInteger(expires) || expires < Date.now()) {
+    return false;
+  }
+
+  const payload = `${answer}.${expiresAt}.${nonce}`;
+  const expected = Buffer.from(captchaSignature(payload));
+  const received = Buffer.from(signature);
+  return (
+    expected.length === received.length &&
+    timingSafeEqual(expected, received) &&
+    value.trim() === answer
+  );
+}
+
+/** Creates a short-lived, signed arithmetic challenge for registration. */
+export function createCaptcha() {
+  const left = randomInt(2, 10);
+  const right = randomInt(1, 10);
+  const expiresAt = Date.now() + captchaLifetimeSeconds * 1000;
+  const payload = `${left + right}.${expiresAt}.${randomBytes(12).toString("base64url")}`;
+  const response = NextResponse.json({ question: `${left} + ${right} = ?` });
+  response.cookies.set(captchaCookieName, `${payload}.${captchaSignature(payload)}`, {
+    httpOnly: true,
+    sameSite: "strict",
+    secure: process.env.NODE_ENV === "production",
+    path: "/api/register",
+    maxAge: captchaLifetimeSeconds,
+  });
+  return response;
+}
 
 function userIdFrom(request: NextRequest) {
   const value = Number(request.cookies.get(cookieName)?.value);
   return Number.isInteger(value) && value > 0 ? value : null;
 }
 
-/** 服务端组件用：从 cookie 读取当前登录用户（等价 getSessionUser，无需 NextRequest）。 */
+/** Reads the current signed-in user for server components. */
 export async function getViewer() {
   const store = await cookies();
   const id = Number(store.get(cookieName)?.value);
@@ -72,11 +125,6 @@ function credentialsFrom(body: Record<string, unknown>) {
   return { username, password };
 }
 
-/** 注册时的段位（与旧服务一致：中文段位词表，未定段用空串存库）。 */
-function registerRank(body: Record<string, unknown>) {
-  return typeof body.rank === "string" ? body.rank.trim() : "";
-}
-
 export async function signIn(request: NextRequest) {
   const { username, password } = credentialsFrom(await requestBody(request));
   if (!username || !password) return invalidInput();
@@ -85,10 +133,16 @@ export async function signIn(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "用户名或密码错误" }, { status: 401 });
   }
   if (user.status === "PENDING") {
-    return NextResponse.json({ ok: false, error: "账号正在审核中，请等待管理员通过。" }, { status: 403 });
+    return NextResponse.json(
+      { ok: false, error: "账号正在审核中，请等待管理员通过。" },
+      { status: 403 },
+    );
   }
   if (user.status === "REJECTED") {
-    return NextResponse.json({ ok: false, error: "账号审核未通过，请联系管理员。" }, { status: 403 });
+    return NextResponse.json(
+      { ok: false, error: "账号审核未通过，请联系管理员。" },
+      { status: 403 },
+    );
   }
   return sessionResponse(user);
 }
@@ -96,27 +150,26 @@ export async function signIn(request: NextRequest) {
 export async function register(request: NextRequest) {
   const body = await requestBody(request);
   const { username, password } = credentialsFrom(body);
-  const rank = registerRank(body);
+  if (!isValidCaptcha(request, body.captchaAnswer)) return captchaResponseError();
   if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]{2,24}$/.test(username) || password.length < 6)
     return invalidInput();
-  if (!RANKS.includes(rank)) {
-    return NextResponse.json({ ok: false, error: "段位不合法" }, { status: 400 });
-  }
   try {
     const user = await prisma.user.create({
       data: {
         username,
         passwordHash: await bcrypt.hash(password, 12),
         status: "PENDING",
-        profile: { create: { name: username, gameName: username, rank: rank === "未定段" ? "" : rank } },
+        profile: { create: { name: username, gameName: username } },
       },
     });
-    return NextResponse.json({
+    const response = NextResponse.json({
       ok: true,
       pending: true,
       message: "注册成功，请等待管理员审核后再登录。",
       username: user.username,
     });
+    response.cookies.delete({ name: captchaCookieName, path: "/api/register" });
+    return response;
   } catch (error) {
     if ((error as { code?: string }).code === "P2002") {
       return NextResponse.json({ ok: false, error: "用户名已被占用" }, { status: 409 });
@@ -128,7 +181,10 @@ export async function register(request: NextRequest) {
 export async function requireAdmin(request: NextRequest) {
   const user = await getSessionUser(request);
   if (!user || !user.isAdmin) {
-    return { user: null, response: NextResponse.json({ error: "需要管理员权限" }, { status: 403 }) };
+    return {
+      user: null,
+      response: NextResponse.json({ error: "需要管理员权限" }, { status: 403 }),
+    };
   }
   return { user, response: null };
 }

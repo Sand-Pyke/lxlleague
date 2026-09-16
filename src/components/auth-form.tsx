@@ -7,32 +7,17 @@ import {
   UserAddOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-import {
-  Alert,
-  Button,
-  Card,
-  Checkbox,
-  Divider,
-  Form,
-  Input,
-  Select,
-  Space,
-  Typography,
-  message,
-} from "antd";
+import { Alert, Button, Card, Divider, Form, Input, Space, Typography, message } from "antd";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { REGISTER_RANK_OPTIONS } from "@/lib/admin-options";
-
+import { useCallback, useEffect, useState } from "react";
 type AuthMode = "login" | "register";
 
 type AuthValues = {
   username: string;
   password: string;
   confirmPassword?: string;
-  rank?: string;
-  agreement?: boolean;
+  captchaAnswer?: string;
 };
 
 export function AuthForm({ mode }: { mode: AuthMode }) {
@@ -40,7 +25,28 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [captchaQuestion, setCaptchaQuestion] = useState("");
+  const [captchaLoading, setCaptchaLoading] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
+
+  const refreshCaptcha = useCallback(async () => {
+    setCaptchaLoading(true);
+    try {
+      const response = await fetch("/api/captcha", { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok || typeof data.question !== "string") throw new Error();
+      setCaptchaQuestion(data.question);
+    } catch {
+      setCaptchaQuestion("");
+      setError("验证码加载失败，请稍后重试");
+    } finally {
+      setCaptchaLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isRegister) void refreshCaptcha();
+  }, [isRegister, refreshCaptcha]);
 
   async function submit(values: AuthValues) {
     setSubmitting(true);
@@ -51,11 +57,16 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           isRegister
-            ? { username: values.username.trim(), password: values.password, rank: values.rank }
+            ? {
+                username: values.username.trim(),
+                password: values.password,
+                captchaAnswer: values.captchaAnswer,
+              }
             : { username: values.username.trim(), password: values.password },
         ),
       });
-      const result = await response.json();
+      const result = await response.json().catch(() => ({}));
+      if (isRegister && result.code === "CAPTCHA_INVALID") void refreshCaptcha();
       if (!response.ok || !result.ok) throw new Error(result.error || "请求失败，请稍后重试");
       // 注册后账号处于待审核状态、不签发会话，因此回登录页而不是个人主页。
       await messageApi.success(
@@ -78,7 +89,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         <Space direction="vertical" size={20} className="auth-card__content">
           <div className="auth-emblem">{isRegister ? <UserAddOutlined /> : <LoginOutlined />}</div>
           <div>
-            <Typography.Text type="secondary">LSPL ACCOUNT</Typography.Text>
+            <Typography.Text type="secondary">LXL ACCOUNT</Typography.Text>
             <Typography.Title level={2}>
               {isRegister ? "创建你的召唤师账号" : "欢迎回到峡谷"}
             </Typography.Title>
@@ -123,19 +134,6 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
             {isRegister && (
               <>
                 <Form.Item
-                  name="rank"
-                  label="段位"
-                  rules={[{ required: true, message: "请选择段位" }]}
-                >
-                  <Select
-                    placeholder="选择段位"
-                    size="large"
-                    options={[...REGISTER_RANK_OPTIONS]}
-                    showSearch
-                    optionFilterProp="label"
-                  />
-                </Form.Item>
-                <Form.Item
                   name="confirmPassword"
                   label="确认密码"
                   dependencies={["password"]}
@@ -158,18 +156,20 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                   />
                 </Form.Item>
                 <Form.Item
-                  name="agreement"
-                  valuePropName="checked"
-                  rules={[
-                    {
-                      validator: (_, checked) =>
-                        checked
-                          ? Promise.resolve()
-                          : Promise.reject(new Error("请阅读并同意服务条款")),
-                    },
-                  ]}
+                  name="captchaAnswer"
+                  label="验证码"
+                  rules={[{ required: true, message: "请输入验证码" }]}
                 >
-                  <Checkbox>我已阅读并同意服务条款与隐私说明</Checkbox>
+                  <div className="captcha-row">
+                    <Input placeholder="计算结果" inputMode="numeric" autoComplete="off" />
+                    <Button
+                      htmlType="button"
+                      onClick={() => void refreshCaptcha()}
+                      loading={captchaLoading}
+                    >
+                      {captchaQuestion || "获取验证码"}
+                    </Button>
+                  </div>
                 </Form.Item>
               </>
             )}

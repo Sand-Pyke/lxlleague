@@ -45,7 +45,7 @@ export function LeagueShell({ children }: { children: React.ReactNode }) {
       <Layout.Header className="league-header">
         <div className="league-header__inner">
           <Link href="/" className="league-brand">
-            LSPL 峡谷冠军联赛
+            LXL 峡谷冠军联赛
           </Link>
           <Menu
             className="league-menu"

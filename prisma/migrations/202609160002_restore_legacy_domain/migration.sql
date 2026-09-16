@@ -1,4 +1,4 @@
--- Add the entities required by the legacy LSPL workflow. Existing accounts
+-- Add the entities required by the legacy LXL workflow. Existing accounts
 -- retain APPROVED status; new registrations are created as PENDING in code.
 CREATE TYPE "AccountStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
 

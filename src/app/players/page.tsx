@@ -146,7 +146,7 @@ export default function PlayersPage() {
         <Typography.Text type="secondary">PLAYER CENTER</Typography.Text>
         <Typography.Title>选手中心</Typography.Title>
         <Typography.Paragraph>
-          LSPL 注册选手 <b>{players.length}</b> 名 · 点击选手可查看个人主页
+          LXL 注册选手 <b>{players.length}</b> 名 · 点击选手可查看个人主页
         </Typography.Paragraph>
       </section>
 
