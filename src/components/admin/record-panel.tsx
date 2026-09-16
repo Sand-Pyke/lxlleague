@@ -204,9 +204,9 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
     }
   }
 
-  function agentCommand() {
+  function agentUiCommand() {
     const api = window.location.origin;
-    return `$env:LXL_IMPORT_TOKEN = \"${importToken}\"; node scripts/lcu-agent.mjs --api \"${api}\"`;
+    return `$env:LXL_IMPORT_TOKEN = \"${importToken}\"; node scripts/lcu-agent.mjs --api \"${api}\" --ui`;
   }
 
   const load = useCallback(async () => {
@@ -672,24 +672,30 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
             </Popconfirm>
           </Space>
           <Space wrap>
-            <span>启动 agent：</span>
+            <span>启动可视化导入台：</span>
             <Typography.Text code>
               $env:LXL_IMPORT_TOKEN = "&lt;令牌&gt;"; node scripts/lcu-agent.mjs --api
-              "&lt;本站地址&gt;"
+              "&lt;本站地址&gt;" --ui
             </Typography.Text>
             <Button
               size="small"
               icon={<CopyOutlined />}
               disabled={!importToken}
-              onClick={() => void copyText(agentCommand(), "启动命令已复制")}
+              onClick={() => void copyText(agentUiCommand(), "可视化启动命令已复制")}
             >
-              复制命令
+              复制可视化命令
             </Button>
           </Space>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            联调可以加 <Typography.Text code>--probe</Typography.Text>（只诊断不上传）、
+            执行后打开 <Typography.Text code>http://127.0.0.1:3179</Typography.Text>
+            ：可选择最近对局、预览 10
+            名参与者的本站账号映射，再确认导入。令牌不会显示在该本地页面中。
+          </Typography.Text>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            仍可用 <Typography.Text code>--probe</Typography.Text>（只诊断不上传）、
             <Typography.Text code>--once</Typography.Text>（只扫一次）和{" "}
-            <Typography.Text code>--dry-run</Typography.Text>（只打印不上传）；不带参数则常驻轮询。
+            <Typography.Text code>--dry-run</Typography.Text>（只打印不上传）；不带参数且不加{" "}
+            <Typography.Text code>--ui</Typography.Text> 则常驻自动轮询。
           </Typography.Text>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             默认一局至少要有 2 名本站选手才导入，用来挡掉路人排位；确实是你们的比赛却被跳过时， 用{" "}

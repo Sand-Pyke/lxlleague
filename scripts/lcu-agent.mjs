@@ -12,6 +12,7 @@
  *   node scripts/lcu-agent.mjs --token <令牌> --once --dry-run   # 看会传什么
  *   node scripts/lcu-agent.mjs --token <令牌> --once             # 真正导入一轮
  *   node scripts/lcu-agent.mjs --token <令牌>                    # 常驻，一局结束就自动导入
+ *   node scripts/lcu-agent.mjs --token <令牌> --ui               # 打开本地可视化导入台
  *
  *   --token    后台「战绩录入 → 自动导入」里那串导入令牌（不传则读环境变量 LXL_IMPORT_TOKEN）
  *   --api      本站地址，默认 http://localhost:3000
@@ -20,6 +21,9 @@
  *   --interval 轮询间隔秒数，默认 20
  *   --dry-run  只打印将要上传的内容，不真的 POST
  *   --lockfile 手动指定 lockfile 路径（自动找不到时用）
+ *   --ux-log   手动指定 LeagueClientUx.log（WeGame 空 lockfile 时的兜底）
+ *   --ui       启动本机可视化导入台（默认 http://127.0.0.1:3179）
+ *   --ui-port  可视化导入台端口，默认 3179
  *
  * 依赖：只用 Node 内置模块（node:fs / node:https），不需要 npm install。
  * 要求 Node >= 18（用到全局 fetch）。
@@ -28,7 +32,7 @@
  *    所以请把它跑在裁判/房主那台机器上。一局的详情里包含全部参与者，一台就够。
  */
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import http from "node:http";
 import https from "node:https";
@@ -47,7 +51,11 @@ const API_BASE = String(flag("api", "http://localhost:3000")).replace(/\/+$/, ""
 const ONCE = has("once");
 const DRY_RUN = has("dry-run");
 const PROBE = has("probe");
+const UI = has("ui");
 const INTERVAL_MS = Math.max(5, Number(flag("interval", 20))) * 1000;
+const rawUiPort = Number(flag("ui-port", 3179));
+const UI_PORT =
+  Number.isInteger(rawUiPort) && rawUiPort >= 1024 && rawUiPort <= 65535 ? rawUiPort : 3179;
 
 /**
  * queueId 白名单；空数组 = 不看队列，什么局都收。
@@ -65,6 +73,15 @@ const QUEUES = String(flag("queues", ""))
 const rawMinPlayers = Number(flag("min-players", 2));
 const MIN_PLAYERS =
   Number.isFinite(rawMinPlayers) && rawMinPlayers >= 1 ? Math.floor(rawMinPlayers) : 2;
+
+// 导入令牌由 randomBytes(...).toString("base64url") 生成，只会包含这组字符。
+// 及早拒绝“<重置后的新令牌>”这类占位文本或复制时混进的中文，避免 fetch 在页面加载
+// 时才因 HTTP Header 非法而报出难以理解的 ByteString 错误。
+if (TOKEN && !/^[A-Za-z0-9_-]+$/.test(TOKEN)) {
+  console.error("导入令牌格式无效：请从后台复制完整令牌，不能包含中文、空格或尖括号。");
+  console.error("请在 PowerShell 中重新设置：$env:LXL_IMPORT_TOKEN = '<新令牌>'");
+  process.exit(1);
+}
 
 if (!TOKEN && !PROBE) {
   console.error("缺少导入令牌。两种都可以：");
@@ -191,6 +208,57 @@ function findLockfileCandidates() {
 }
 
 /**
+ * 收集 LeagueClientUx 启动日志。正常客户端不需要走到这里；但 WeGame 的空 lockfile
+ * 是真实会出现的状态，日志是此时唯一不需要读取受保护进程参数的本地凭据来源。
+ */
+function findUxLogCandidates() {
+  const explicit = flag("ux-log");
+  if (typeof explicit === "string") return existsSync(explicit) ? [explicit] : [];
+
+  const dirs = new Set(findLockfileCandidates().map((file) => path.dirname(file)));
+  const files = [];
+  for (const dir of dirs) {
+    try {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (!entry.isFile() || !/^.*LeagueClientUx\.log$/i.test(entry.name)) continue;
+        const file = path.join(dir, entry.name);
+        files.push({ file, mtime: statSync(file).mtimeMs });
+      }
+    } catch {
+      // 日志目录被清理或没有读取权限时直接尝试下一个候选目录。
+    }
+  }
+  return files.sort((left, right) => right.mtime - left.mtime).map((entry) => entry.file);
+}
+
+/** 从最新到最旧解析 Ux 日志；返回时绝不记录令牌原文。 */
+function credentialsFromUxLogs() {
+  const candidates = [];
+  for (const file of findUxLogCandidates()) {
+    try {
+      const raw = readFileSync(file, "utf8");
+      const ports = [...raw.matchAll(/--app-port=(\d+)/g)];
+      const tokens = [...raw.matchAll(/--remoting-auth-token=([^\s"']+)/g)];
+      const port = ports.at(-1)?.[1];
+      const token = tokens.at(-1)?.[1];
+      if (!port || !token) continue;
+      candidates.push({
+        file,
+        creds: {
+          port: Number(port),
+          password: token,
+          protocol: "https",
+          from: "LeagueClientUx 日志",
+        },
+      });
+    } catch {
+      // 单个旧日志损坏不妨碍继续尝试其它候选。
+    }
+  }
+  return candidates;
+}
+
+/**
  * 逐个候选尝试，并用真实请求验证它是不是英雄联盟的 LCU。
  * 为什么必须验证：同目录下还有个 Riot Client 的 lockfile，格式一模一样、
  * 也能连上，但 `/lol-summoner/v1/current-summoner` 会 404 —— 直接用会得到很迷惑的报错。
@@ -233,6 +301,16 @@ async function readCredentials() {
     // 进程参数同样要验证：拿到的可能是 Riot Client 或其它组件的端口。
     if (await looksLikeLcu(fromProcess)) return { creds: fromProcess, rejected };
     rejected.push(`进程参数给的端口 ${fromProcess.port} 不是英雄联盟的 LCU`);
+  }
+
+  // 国服 WeGame 有时会留下一个 0 字节 lockfile，同时因客户端提权而读不到进程参数。
+  // LeagueClientUx 的启动日志仍会记录当次 --app-port / --remoting-auth-token，作为最后兜底。
+  for (const fromLog of credentialsFromUxLogs()) {
+    if (await looksLikeLcu(fromLog.creds)) {
+      log(`已从 LeagueClientUx 日志读到端口 ${fromLog.creds.port}`);
+      return { creds: fromLog.creds, rejected };
+    }
+    rejected.push(`${fromLog.file}（日志凭据已过期或不是当前客户端）`);
   }
   return { creds: null, rejected };
 }
@@ -396,9 +474,20 @@ function buildRows(game, context) {
   // context 可能为空：--probe 不带令牌时只诊断客户端，没有名单可匹配。
   const players = context?.players ?? [];
   const byPuuid = new Map(players.filter((p) => p.puuid).map((p) => [p.puuid, p]));
-  const byName = new Map(
-    players.filter((p) => p.gameName).map((p) => [p.gameName.trim().toLowerCase(), p]),
-  );
+  const byName = new Map();
+  const addName = (key, player) => {
+    if (!key) return;
+    const previous = byName.get(key);
+    // 同一个游戏名可能被错误填到两个账号，宁可不匹配也绝不能猜一个写入。
+    byName.set(key, previous && previous !== player ? null : player);
+  };
+  for (const player of players) {
+    const fullName = player.gameName.trim().toLowerCase();
+    addName(fullName, player);
+    // 本站资料常填完整 Riot ID（游戏名#标签），但 LCU 对局详情多数只给游戏名。
+    // 兼容该差异；若出现同名，addName 会把该别名标为 null，避免误导入。
+    addName(fullName.split("#")[0], player);
+  }
 
   // participantId → { puuid, name }，经典形态下身份只能从这里取。
   const identities = new Map();
@@ -452,7 +541,9 @@ function buildRows(game, context) {
       items,
     };
 
-    const player = byPuuid.get(key) ?? byName.get(name.toLowerCase());
+    const normalizedName = name.toLowerCase();
+    const player =
+      byPuuid.get(key) ?? byName.get(normalizedName) ?? byName.get(normalizedName.split("#")[0]);
     if (!player) {
       unmatched.push(mapped.name);
       all.push({ ...mapped, user_id: 0 });
@@ -756,6 +847,289 @@ async function probe() {
   return 0;
 }
 
+// ---------- 5. 本地可视化导入台 ----------
+
+/**
+ * 浏览器不能直接连接 LCU：它只接受本机 Basic Auth，而且会受同源策略限制。
+ * `--ui` 因此由 agent 在 127.0.0.1 上提供一个极薄的操作界面；所有 LCU 请求、
+ * 导入令牌和向站点的写入仍只发生在这个 Node 进程中，页面永远拿不到令牌。
+ */
+const localUiHtml = `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LXL 本地战绩导入台</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, "Microsoft YaHei", system-ui, sans-serif; background: #080d17; color: #edf3ff; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-width: 320px; background: radial-gradient(circle at 15% -20%, #183866 0, transparent 36%), #080d17; }
+      main { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 34px 0 60px; }
+      header { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; margin-bottom: 20px; }
+      h1 { font-size: 25px; margin: 0 0 7px; letter-spacing: .2px; }
+      h2 { margin: 0; font-size: 16px; }
+      p { margin: 0; color: #9fb0ca; line-height: 1.65; font-size: 13px; }
+      button, select { border: 0; border-radius: 8px; font: inherit; cursor: pointer; }
+      button { color: #06101e; font-weight: 700; background: #70d8ff; padding: 9px 14px; }
+      button:hover { background: #a5e8ff; }
+      button:disabled { cursor: not-allowed; opacity: .55; }
+      select { background: #192438; color: #edf3ff; padding: 8px 10px; border: 1px solid #2d3e5b; }
+      .grid { display: grid; grid-template-columns: 1.2fr .8fr; gap: 14px; }
+      .card { border: 1px solid #20304a; background: rgba(15, 25, 42, .92); box-shadow: 0 15px 40px rgba(0,0,0,.18); border-radius: 13px; padding: 18px; }
+      .card-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 12px; }
+      .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 13px; }
+      .pill { font-size: 12px; background: #17263d; color: #bfd7ff; padding: 5px 8px; border-radius: 999px; }
+      .pill.ok { color: #8cf0bd; background: #12382c; }
+      .pill.warn { color: #ffd682; background: #442e11; }
+      .notice { display: none; border-radius: 8px; padding: 11px 12px; margin: 0 0 14px; font-size: 13px; line-height: 1.55; }
+      .notice.error { display: block; background: #471d2a; color: #ffc1cc; }
+      .notice.success { display: block; background: #12382c; color: #b6f8d1; }
+      .games { display: grid; gap: 8px; max-height: 350px; overflow: auto; padding-right: 2px; }
+      .game { width: 100%; text-align: left; padding: 12px; color: #dfeaff; background: #121e31; border: 1px solid #233653; }
+      .game:hover, .game.active { border-color: #70d8ff; background: #162b47; }
+      .game strong { display: block; margin-bottom: 4px; font-size: 13px; }
+      .game small { color: #9eb1ce; }
+      .summary { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 13px; }
+      .summary label { color: #aebed5; font-size: 13px; }
+      .table-wrap { overflow: auto; border: 1px solid #22334d; border-radius: 9px; }
+      table { width: 100%; border-collapse: collapse; min-width: 760px; font-size: 13px; }
+      th { text-align: left; background: #15243a; color: #9eb5d6; font-size: 11px; letter-spacing: .3px; }
+      th, td { padding: 10px 11px; border-bottom: 1px solid #20304a; }
+      tr:last-child td { border-bottom: 0; }
+      .matched { color: #8cf0bd; font-weight: 700; }
+      .unmatched { color: #ffb4be; }
+      .empty { color: #91a4c2; font-size: 13px; padding: 28px 10px; text-align: center; }
+      .actions { display: flex; justify-content: flex-end; gap: 10px; align-items: center; margin-top: 15px; }
+      .muted { color: #93a6c4; font-size: 12px; }
+      @media (max-width: 760px) { main { width: min(100% - 22px, 1180px); padding-top: 20px; } header { display: block; } header button { margin-top: 14px; } .grid { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div><h1>LXL 本地战绩导入台</h1><p>只在这台安装英雄联盟客户端的电脑上运行。先预览，再确认写入进行中的赛事。</p></div>
+        <button id="refresh">刷新对局</button>
+      </header>
+      <div id="notice" class="notice"></div>
+      <section class="grid">
+        <div class="card"><div class="card-head"><h2>导入目标</h2><span id="lcuState" class="pill">正在连接 LCU…</span></div><div id="context"><div class="empty">正在读取赛事上下文…</div></div></div>
+        <div class="card"><div class="card-head"><h2>最近对局</h2><span id="gameCount" class="pill">0 局</span></div><div id="games" class="games"><div class="empty">正在读取本机对局历史…</div></div></div>
+      </section>
+      <section class="card" style="margin-top:14px"><div class="card-head"><h2>战绩预览</h2><span id="previewState" class="pill warn">请选择一局</span></div><div id="preview"><div class="empty">选中右侧对局后，这里会显示全部 10 名参与者及本站账号匹配结果。</div></div></section>
+    </main>
+    <script>
+      const state = { data: null, selected: null, busy: false };
+      const byId = (id) => document.getElementById(id);
+      const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => char === "&" ? "&amp;" : char === "<" ? "&lt;" : char === ">" ? "&gt;" : char === '"' ? "&quot;" : "&#039;");
+      const setNotice = (text = "", type = "") => { const el = byId("notice"); el.textContent = text; el.className = type ? "notice " + type : "notice"; };
+      const gameTime = (value) => value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "时间未知";
+      function render() {
+        const data = state.data;
+        if (!data) return;
+        const context = data.context;
+        byId("lcuState").textContent = data.lcu.connected ? "LCU 已连接" : "LCU 未连接";
+        byId("lcuState").className = "pill " + (data.lcu.connected ? "ok" : "warn");
+        byId("context").innerHTML = context.match ? '<strong>' + escape(context.match.name) + '</strong><div class="meta"><span class="pill ok">进行中</span><span class="pill">第 ' + context.match.currentRound + ' 轮</span><span class="pill">BO' + context.match.bo + '</span><span class="pill">已报名 ' + context.players.length + ' 人</span></div><p style="margin-top:12px">写入目标由服务端固定为当前进行中的赛事和轮次，避免误导入到历史赛事。</p>' : '<div class="empty">服务端没有进行中的赛事。请先在管理后台把目标赛事设为「进行中」。</div>';
+        const games = data.games || [];
+        byId("gameCount").textContent = games.length + " 局";
+        byId("games").innerHTML = games.length ? games.map((game) => '<button class="game ' + (state.selected === game.id ? 'active' : '') + '" data-game="' + escape(game.id) + '"><strong>' + gameTime(game.playedAt) + '</strong><small>对局 ' + escape(game.id) + ' · 队列 ' + escape(game.queueId) + ' · 匹配 ' + game.matchedCount + ' / ' + game.players.length + ' 人</small></button>').join("") : '<div class="empty">没有可读取的对局历史。</div>';
+        document.querySelectorAll("[data-game]").forEach((button) => button.onclick = () => { state.selected = button.dataset.game; render(); });
+        renderPreview();
+      }
+      function renderPreview() {
+        const game = (state.data?.games || []).find((item) => item.id === state.selected);
+        const target = byId("preview"); const badge = byId("previewState");
+        if (!game) { badge.textContent = "请选择一局"; badge.className = "pill warn"; target.innerHTML = '<div class="empty">选中右侧对局后，这里会显示全部 10 名参与者及本站账号匹配结果。</div>'; return; }
+        badge.textContent = "已匹配 " + game.matchedCount + " 人"; badge.className = "pill " + (game.matchedCount >= state.data.policy.minPlayers ? "ok" : "warn");
+        const rows = game.players.map((player) => '<tr><td>' + escape(player.team === 100 ? '蓝方' : player.team === 200 ? '红方' : '队伍 ' + player.team) + '</td><td>' + escape(player.name) + '</td><td>' + escape(player.champion || '-') + '</td><td>' + escape(player.result === 'win' ? '胜' : '负') + '</td><td>' + player.kills + ' / ' + player.deaths + ' / ' + player.assists + '</td><td>' + player.cs + '</td><td>' + (player.matched ? '<span class="matched">' + escape(player.username) + '</span>' : '<span class="unmatched">未匹配</span>') + '</td></tr>').join("");
+        target.innerHTML = '<div class="summary"><span class="pill">队列 ' + escape(game.queueId) + '</span><span class="pill">对局时间 ' + gameTime(game.playedAt) + '</span><label>局号 <select id="gameNo"><option value="">自动分配</option>' + Array.from({length: 5}, (_, i) => '<option value="' + (i + 1) + '">第 ' + (i + 1) + ' 局</option>').join("") + '</select></label><span class="muted">至少匹配 ' + state.data.policy.minPlayers + ' 名本站选手才允许导入</span></div><div class="table-wrap"><table><thead><tr><th>阵营</th><th>游戏 ID</th><th>英雄</th><th>结果</th><th>K / D / A</th><th>CS</th><th>本站账号</th></tr></thead><tbody>' + rows + '</tbody></table></div><div class="actions"><span class="muted">导入后可在后台战绩录入中补充 MVP、SVP 与队内名次。</span><button id="import" ' + (state.busy || !state.data.context.match || game.matchedCount < state.data.policy.minPlayers ? 'disabled' : '') + '>确认导入本局</button></div>';
+        const button = byId("import"); if (button) button.onclick = importSelected;
+      }
+      async function refresh() {
+        byId("refresh").disabled = true; setNotice();
+        try { const response = await fetch("/api/status"); const data = await response.json(); if (!response.ok) throw new Error(data.error || "读取失败"); state.data = data; if (!data.games.some((game) => game.id === state.selected)) state.selected = data.games[0]?.id ?? null; render(); if (data.warning) setNotice(data.warning, "error"); }
+        catch (error) { setNotice(error.message || "读取本地导入台失败", "error"); }
+        finally { byId("refresh").disabled = false; }
+      }
+      async function importSelected() {
+        const game = (state.data?.games || []).find((item) => item.id === state.selected); if (!game) return;
+        if (!confirm('确认将这局的 ' + game.matchedCount + ' 条已匹配战绩写入当前进行中的赛事吗？')) return;
+        state.busy = true; renderPreview(); setNotice();
+        try { const gameNo = byId("gameNo")?.value || undefined; const response = await fetch("/api/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gameId: game.id, gameNo }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "导入失败"); setNotice(data.msg || "导入完成", "success"); await refresh(); }
+        catch (error) { setNotice(error.message || "导入失败", "error"); }
+        finally { state.busy = false; renderPreview(); }
+      }
+      byId("refresh").onclick = refresh; refresh();
+    </script>
+  </body>
+</html>`;
+
+function writeUiJson(response, status, payload) {
+  response.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+  });
+  response.end(JSON.stringify(payload));
+}
+
+function readUiBody(request, limit = 16 * 1024) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > limit) request.destroy(new Error("请求内容过大"));
+    });
+    request.on("end", () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch {
+        reject(new Error("请求内容不是有效 JSON"));
+      }
+    });
+    request.on("error", reject);
+  });
+}
+
+/** 返回页面需要的脱敏数据；PUUID 与导入令牌不会离开 agent 进程。 */
+async function localUiSnapshot() {
+  const context = await api("/api/import/context");
+  const { creds, rejected } = await readCredentials();
+  if (!creds) {
+    return {
+      context,
+      games: [],
+      policy: { minPlayers: MIN_PLAYERS, queues: QUEUES },
+      lcu: { connected: false },
+      warning: `没有连接到英雄联盟客户端。${rejected[0] ?? "请启动客户端并完成登录。"}`,
+    };
+  }
+
+  const summoner = await lcuRequest(creds, "GET", "/lol-summoner/v1/current-summoner");
+  if (!summoner?.puuid) throw new Error("客户端尚未完成登录，无法取得当前账号");
+  const history = await lcuRequest(
+    creds,
+    "GET",
+    `/lol-match-history/v1/products/lol/${summoner.puuid}/matches?begIndex=0&endIndex=5`,
+  );
+  const summaries = (history?.games?.games ?? []).filter((game) => game?.gameId);
+  const games = [];
+  for (const summary of summaries) {
+    const id = String(summary.gameId);
+    try {
+      const detail = await lcuRequest(creds, "GET", `/lol-match-history/v1/games/${id}`);
+      if (!detail?.participants?.length) continue;
+      const { all, rows } = buildRows(detail, context);
+      games.push({
+        id,
+        queueId: Number(detail.queueId ?? -1),
+        playedAt: detail.gameCreation ?? summary.gameCreation ?? null,
+        matchedCount: rows.length,
+        players: all.map((player) => ({
+          name: player.name,
+          username: context.players.find((item) => item.userId === player.user_id)?.username ?? "",
+          matched: Boolean(player.user_id),
+          team: player.team,
+          champion: player.champion,
+          result: player.result,
+          kills: player.kills,
+          deaths: player.deaths,
+          assists: player.assists,
+          cs: player.cs,
+        })),
+      });
+    } catch (error) {
+      warn(
+        `可视化导入台读取对局 ${id} 失败：`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+  return {
+    context,
+    games,
+    policy: { minPlayers: MIN_PLAYERS, queues: QUEUES },
+    lcu: { connected: true, account: String(summoner.gameName ?? summoner.displayName ?? "") },
+  };
+}
+
+async function importFromLocalUi(body) {
+  const gameId = String(body?.gameId ?? "").trim();
+  if (!gameId || gameId.length > 128) throw new Error("请选择有效的对局");
+  const context = await api("/api/import/context");
+  if (!context.match) throw new Error("没有进行中的赛事，不能导入");
+
+  const { creds } = await readCredentials();
+  if (!creds) throw new Error("没有连接到英雄联盟客户端");
+  const detail = await lcuRequest(creds, "GET", `/lol-match-history/v1/games/${gameId}`);
+  if (!detail?.participants?.length) throw new Error("这局没有可读取的参与者数据");
+  const queueId = Number(detail.queueId ?? -1);
+  if (QUEUES.length && !QUEUES.includes(queueId)) {
+    throw new Error(`队列 ${queueId} 不在允许列表（${QUEUES.join(", ")}）中`);
+  }
+  const { rows } = buildRows(detail, context);
+  if (rows.length < MIN_PLAYERS) {
+    throw new Error(`只匹配到 ${rows.length} 名本站选手，至少需要 ${MIN_PLAYERS} 名`);
+  }
+  const requestedGameNo =
+    body?.gameNo === undefined || body.gameNo === "" ? undefined : Number(body.gameNo);
+  if (
+    requestedGameNo !== undefined &&
+    (!Number.isInteger(requestedGameNo) || requestedGameNo < 1 || requestedGameNo > 5)
+  ) {
+    throw new Error("局号必须在 1 到 5 之间");
+  }
+  return api("/api/import/records", {
+    method: "POST",
+    body: JSON.stringify({
+      sourceGameId: gameId,
+      matchId: context.match.id,
+      roundNo: context.match.currentRound,
+      ...(requestedGameNo ? { gameNo: requestedGameNo } : {}),
+      playedAt: new Date(detail.gameCreation ?? Date.now()).toISOString(),
+      rows,
+    }),
+  });
+}
+
+async function startLocalUi() {
+  const server = http.createServer(async (request, response) => {
+    const pathname = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+    try {
+      if (request.method === "GET" && pathname === "/") {
+        response.writeHead(200, {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Content-Security-Policy":
+            "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'",
+          "X-Content-Type-Options": "nosniff",
+        });
+        response.end(localUiHtml);
+        return;
+      }
+      if (request.method === "GET" && pathname === "/api/status") {
+        writeUiJson(response, 200, await localUiSnapshot());
+        return;
+      }
+      if (request.method === "POST" && pathname === "/api/import") {
+        const result = await importFromLocalUi(await readUiBody(request));
+        writeUiJson(response, 200, result);
+        return;
+      }
+      writeUiJson(response, 404, { error: "找不到该本地接口" });
+    } catch (error) {
+      writeUiJson(response, 400, {
+        error: error instanceof Error ? error.message : "本地导入台发生错误",
+      });
+    }
+  });
+  server.listen(UI_PORT, "127.0.0.1", () => {
+    log(`可视化导入台已启动：http://127.0.0.1:${UI_PORT}`);
+    log("令牌只保留在 agent 进程中；按 Ctrl+C 停止本地导入台。");
+  });
+}
+
 async function main() {
   log(`目标站点 ${API_BASE}${DRY_RUN ? "（dry-run，不会真的写入）" : ""}`);
   loadChampions();
@@ -766,6 +1140,11 @@ async function main() {
 
   if (PROBE) {
     process.exit(await probe());
+  }
+
+  if (UI) {
+    await startLocalUi();
+    return;
   }
 
   if (ONCE) {
