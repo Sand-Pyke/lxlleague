@@ -2144,6 +2144,7 @@ body {
 .profile-empty-card {
   max-width: 620px;
   margin: 48px auto;
+  width: 100%;
 }
 
 /* ---------- 选手中心（搜索 / 筛选 / 卡片与列表视图） ---------- */
@@ -2504,6 +2505,8 @@ body {
 .prof-rank {
   color: #c4b5fd;
   font-size: 15px;
+  display: flex;
+  align-items: center;
 }
 
 .prof-tag {
@@ -2894,6 +2897,55 @@ body {
   border-radius: 6px;
 }
 
+/* 表情头像选择网格：6 列圆形预览，与背景网格同一套交互（点选 + 高亮边框）。 */
+.prof-emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+}
+
+.prof-emoji-grid button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px;
+  font-size: 11px;
+  color: #cbd5e1;
+  cursor: pointer;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid var(--league-border);
+  border-radius: 10px;
+}
+
+.prof-emoji-grid button.selected {
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 1px #a78bfa inset;
+}
+
+.prof-emoji-grid button > span {
+  display: block;
+  width: 48px;
+  height: 48px;
+  background-position: center;
+  background-size: cover;
+  border-radius: 50%;
+}
+
+/* 「我的资料设置」里头像一行的缩略图 */
+.prof-settings-avatar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prof-settings-avatar img {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #eef2ff;
+}
+
 @media (max-width: 1100px) {
   .prof-grid {
     grid-template-columns: 1fr;
@@ -2905,6 +2957,10 @@ body {
 
   .prof-bg-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .prof-emoji-grid {
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
@@ -2985,7 +3041,8 @@ body {
 }
 
 :root[data-theme="light"] .prof-stat,
-:root[data-theme="light"] .prof-bg-grid button {
+:root[data-theme="light"] .prof-bg-grid button,
+:root[data-theme="light"] .prof-emoji-grid button {
   background: rgba(255, 255, 255, 0.9);
   border-color: var(--league-border);
 }
@@ -2995,8 +3052,17 @@ body {
 :root[data-theme="light"] .prof-hero-row strong,
 :root[data-theme="light"] .prof-champion > span,
 :root[data-theme="light"] .prof-kda,
-:root[data-theme="light"] .prof-bg-grid button {
+:root[data-theme="light"] .prof-bg-grid button,
+:root[data-theme="light"] .prof-emoji-grid button {
   color: #172033;
+}
+
+/* 浅色主题下上面那条 button 规则的优先级高于 .prof-emoji-grid button.selected，
+   选中态的紫色描边会被覆盖掉；这里用同样带主题限定的选择器把选中态补回来。 */
+:root[data-theme="light"] .prof-emoji-grid button.selected {
+  border-color: #6d28d9;
+  box-shadow: 0 0 0 1px #6d28d9 inset;
+  background: rgba(109, 40, 217, 0.08);
 }
 
 :root[data-theme="light"] .prof-bio.ant-typography,

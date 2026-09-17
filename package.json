@@ -10,6 +10,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
+    "assets:default-avatars": "node scripts/build-default-avatars.mjs",
     "lint": "next lint",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.{ts,json,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"*.{ts,json,md}\""

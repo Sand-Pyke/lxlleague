@@ -30,6 +30,7 @@ npm run start
 npm run format        # 使用 Prettier 格式化项目代码
 npm run format:check  # 检查 Prettier 格式
 npm run build         # 类型检查和生产构建
+npm run assets:default-avatars  # 重新生成注册默认表情头像（需联网，素材见 public/assets/avatars/default/README.md）
 ```
 
 ## LCU 可视化战绩导入台
@@ -73,6 +74,7 @@ src/components/      导航壳、赛事卡片等跨页面复用组件
 src/server/          按领域组织的服务端业务与 API Handler
 src/lib/data.ts      数据类型与空数据访问边界
 public/assets/       原工程迁移的背景、英雄、装备和头像资源
+public/assets/avatars/default/  注册默认表情头像（Twemoji 合成，含来源说明与生成脚本）
 ```
 
 ## 前端模块边界

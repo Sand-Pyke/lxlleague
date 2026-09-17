@@ -8,6 +8,7 @@ import {
 } from "@/lib/admin-options";
 import { prisma } from "@/lib/prisma";
 import { GAME_NAME_HINT, isValidGameName } from "@/lib/game-name";
+import { randomDefaultAvatar } from "@/lib/default-avatars";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
 import { ApiError, badRequest, notFound } from "@/server/api";
@@ -260,7 +261,7 @@ async function writeUserRank(userId: number, username: string, rank: string) {
     prisma.playerProfile.upsert({
       where: { userId },
       update: { rank: stored },
-      create: { userId, name: username, gameName: "", rank: stored },
+      create: { userId, name: username, gameName: "", rank: stored, avatar: randomDefaultAvatar() },
     }),
     prisma.matchSignup.updateMany({ where: { userId }, data: { rankAtSignup: stored } }),
   ]);
@@ -290,7 +291,7 @@ export async function setUserGameName(userId: number, gameName: string) {
   await prisma.playerProfile.upsert({
     where: { userId },
     update: { gameName: value },
-    create: { userId, name: user.username, gameName: value },
+    create: { userId, name: user.username, gameName: value, avatar: randomDefaultAvatar() },
   });
   return { msg: `已设置 ${user.username} 的游戏ID：${value || "(空)"}` };
 }

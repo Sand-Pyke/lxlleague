@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { normalizeRank } from "@/lib/admin-options";
+import { randomDefaultAvatar } from "@/lib/default-avatars";
 import { prisma } from "@/lib/prisma";
 
 const cookieName = "lxl_user_id";
@@ -191,7 +192,10 @@ export async function register(request: NextRequest) {
         passwordHash: await bcrypt.hash(password, 12),
         status: "PENDING",
         // 游戏ID不再复用账号名：必须由选手按游戏内昵称自己填写（格式 名称#数字编号）。
-        profile: { create: { name: username, gameName: "", rank } },
+        // 头像先随机发一个默认表情头像，选手可以在「我的资料」里更换或上传自己的图。
+        profile: {
+          create: { name: username, gameName: "", rank, avatar: randomDefaultAvatar() },
+        },
       },
     });
     const response = NextResponse.json({

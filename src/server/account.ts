@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isBackgroundFile, BACKGROUND_PREFIX } from "@/lib/backgrounds";
+import { normalizeDefaultAvatar, randomDefaultAvatar } from "@/lib/default-avatars";
 import { RANKS, RANK_REVIEW_NOTE, normalizeRank, normalizeSubPosition } from "@/lib/admin-options";
 import { GAME_NAME_HINT, isValidGameName } from "@/lib/game-name";
 import { MAX_FAVORITE_HEROES, formatFavoriteHeroes } from "@/lib/favorite-heroes";
@@ -34,6 +35,7 @@ async function jsonBody(request: NextRequest) {
  * 早期账号（seed 出来的管理员等）可能没有资料行，注册流程才会建。
  * 自助编辑与个人主页都按「资料行必须存在」处理，缺失时按账号名补一条。
  * 游戏ID不再复用账号名（需选手自己按游戏内昵称填写），这里留空等待补全。
+ * 头像同样先随机发一个默认表情头像，用户之后可以自己换或上传。
  */
 export async function ensureProfile(userId: number) {
   const existing = await prisma.playerProfile.findUnique({
@@ -44,7 +46,14 @@ export async function ensureProfile(userId: number) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { username: true } });
   if (!user) return;
   await prisma.playerProfile
-    .create({ data: { userId, name: user.username, gameName: "" } })
+    .create({
+      data: {
+        userId,
+        name: user.username,
+        gameName: "",
+        avatar: randomDefaultAvatar(),
+      },
+    })
     .catch(() => undefined);
 }
 
@@ -280,6 +289,18 @@ export async function selectBackground(request: NextRequest) {
   const backgroundImage = BACKGROUND_PREFIX + file;
   await prisma.user.update({ where: { id: userId }, data: { backgroundImage } });
   return NextResponse.json({ msg: "背景已更新", background: backgroundImage });
+}
+
+/** 从默认表情头像里挑一个（兼容传 id 或完整路径）。 */
+export async function selectDefaultAvatar(request: NextRequest) {
+  const userId = await currentUserId(request);
+  if (!userId) return message("请先登录", 401);
+  const raw = text((await jsonBody(request)).avatar).trim();
+  const avatar = normalizeDefaultAvatar(raw);
+  if (!avatar) return message("头像不合法", 400);
+  await ensureProfile(userId);
+  await prisma.playerProfile.update({ where: { userId }, data: { avatar } });
+  return NextResponse.json({ msg: "头像已更新", avatar });
 }
 
 /** 自定义背景上传：一个用户只保留一张，全站生效（仅深色模式拉取）。 */

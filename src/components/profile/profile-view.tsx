@@ -4,6 +4,8 @@ import {
   CameraOutlined,
   LoginOutlined,
   PictureOutlined,
+  ReloadOutlined,
+  SmileOutlined,
   UserAddOutlined,
   UserOutlined,
 } from "@ant-design/icons";
@@ -42,6 +44,12 @@ import {
   subPositionChoices,
 } from "@/lib/admin-options";
 import { BACKGROUND_OPTIONS } from "@/lib/backgrounds";
+import {
+  DEFAULT_AVATAR_OPTIONS,
+  defaultAvatarPath,
+  isDefaultAvatar,
+  randomDefaultAvatar,
+} from "@/lib/default-avatars";
 import { MAX_FAVORITE_HEROES } from "@/lib/favorite-heroes";
 import { GAME_NAME_HINT, isValidGameName } from "@/lib/game-name";
 import { championChoices, championIcon, itemIcon } from "@/lib/game-assets";
@@ -120,7 +128,8 @@ type ProfilePayload = {
   match_history: HistoryRow[];
 };
 
-type EditKind = "bio" | "kook" | "game" | "hero" | "account" | "pwd" | "pos" | "rank" | "bg";
+type EditKind =
+  "bio" | "kook" | "game" | "hero" | "account" | "pwd" | "pos" | "rank" | "avatar" | "bg";
 
 const EDIT_TITLE: Record<EditKind, string> = {
   bio: "编辑个人简介",
@@ -131,6 +140,7 @@ const EDIT_TITLE: Record<EditKind, string> = {
   pwd: "修改密码",
   pos: "设置位置",
   rank: "修改段位",
+  avatar: "选择表情头像",
   bg: "选择背景图",
 };
 
@@ -145,6 +155,7 @@ const emptyDraft = {
   mainPos: "",
   subPos: NO_SUB_POSITION,
   rank: "",
+  avatar: "",
   bg: "",
 };
 
@@ -220,6 +231,8 @@ export function ProfileView() {
         ? payload.user.subPosition
         : NO_SUB_POSITION,
       rank: payload.user.rank ?? "",
+      // 只有内置表情头像能在弹窗里高亮选中；自定义上传的图保持未选中状态。
+      avatar: isDefaultAvatar(payload.user.avatar) ? payload.user.avatar : "",
       bg: payload.user.background.replace("/assets/bgs/", ""),
     });
     setEditKind(kind);
@@ -269,6 +282,10 @@ export function ProfileView() {
       messageApi.error(`游戏ID格式不正确：${GAME_NAME_HINT}`);
       return;
     }
+    if (editKind === "avatar" && !draft.avatar) {
+      messageApi.error("请选择一个表情头像");
+      return;
+    }
     setSaving(true);
     try {
       const request: Record<EditKind, [string, Record<string, unknown>]> = {
@@ -284,6 +301,7 @@ export function ProfileView() {
         ],
         // 段位不能直接改：提交后账号会重新进入待审核状态。
         rank: ["/api/user/rank", { rank: draft.rank }],
+        avatar: ["/api/user/avatar", { avatar: draft.avatar }],
         bg: ["/api/user/bg", { bg: draft.bg }],
       };
       const [url, body] = request[editKind];
@@ -291,8 +309,8 @@ export function ProfileView() {
       messageApi.success(successText(data, "已保存"));
       setEditKind(null);
       await load();
-      // 顶栏显示账户ID、全站背景都来自根布局的服务端注入，改完需刷新才会同步。
-      if (editKind === "account" || editKind === "bg") router.refresh();
+      // 顶栏显示账户ID、头像与全站背景都来自根布局的服务端注入，改完需刷新才会同步。
+      if (editKind === "account" || editKind === "avatar" || editKind === "bg") router.refresh();
     } catch (error) {
       messageApi.error(errorText(error));
     } finally {
@@ -446,7 +464,7 @@ export function ProfileView() {
             <div className="prof-hero-inner">
               <div className="prof-avatar-box">
                 {self ? (
-                  <Tooltip title={user.avatar ? "点击更换头像" : "还没有头像，点击上传"}>
+                  <Tooltip title="点击上传自定义头像">
                     <Upload
                       accept="image/*"
                       showUploadList={false}
@@ -476,6 +494,9 @@ export function ProfileView() {
                 )}
                 {self ? (
                   <div className="prof-avatar-actions">
+                    <a onClick={() => openEdit("avatar")}>
+                      <SmileOutlined /> 表情头像
+                    </a>
                     {mode === "dark" ? (
                       <a onClick={() => openEdit("bg")}>
                         <PictureOutlined /> 选择背景
@@ -507,7 +528,10 @@ export function ProfileView() {
                     副位置 {positionText(user.subPosition)}
                   </Tag>
                   {heroStrip.length ? (
-                    <span className="prof-heroes" title={favoriteHeroes.length ? "常用英雄" : "常用英雄（按战绩）"}>
+                    <span
+                      className="prof-heroes"
+                      title={favoriteHeroes.length ? "常用英雄" : "常用英雄（按战绩）"}
+                    >
                       {heroStrip.map((name) => {
                         const icon = championIcon(name);
                         return icon ? <img key={name} src={icon} alt={name} title={name} /> : null;
@@ -549,9 +573,7 @@ export function ProfileView() {
                         { label: "游戏ID", value: user.gameName || "未设置", kind: "game" },
                         {
                           label: "常用英雄",
-                          value: favoriteHeroes.length
-                            ? favoriteHeroes.join(" / ")
-                            : "未设置",
+                          value: favoriteHeroes.length ? favoriteHeroes.join(" / ") : "未设置",
                           kind: "hero" as EditKind,
                         },
                         {
@@ -575,14 +597,16 @@ export function ProfileView() {
                         <span>
                           {row.label}：<b>{row.value}</b>
                         </span>
-                        <Button size="small" type="link" onClick={() => openEdit(row.kind)}>
-                          设置
-                        </Button>
+                        {row.kind !== "account" && (
+                          <Button size="small" type="link" onClick={() => openEdit(row.kind)}>
+                            {row.value === "未设置" ? "设置" : "修改"}
+                          </Button>
+                        )}
                       </div>
                     ))}
                     <p className="prof-settings-note">
-                      游戏ID（召唤师名）用于战绩导入时匹配到你的账号，需与游戏内名称一致，
-                      格式为 名称#数字编号（例如 众生皆我#32250）。
+                      游戏ID（召唤师名）用于战绩导入时匹配到你的账号，需与游戏内名称一致， 格式为
+                      名称#数字编号（例如 众生皆我#32250）。
                     </p>
                     {missingForSignup.length ? (
                       <Alert
@@ -740,7 +764,7 @@ export function ProfileView() {
         title={editKind ? EDIT_TITLE[editKind] : ""}
         okText="保存"
         cancelText="取消"
-        width={editKind === "bg" ? 720 : 460}
+        width={editKind === "bg" ? 720 : editKind === "avatar" ? 560 : 460}
         confirmLoading={saving}
         onCancel={() => setEditKind(null)}
         onOk={() => void submitEdit()}
@@ -894,6 +918,48 @@ export function ProfileView() {
             </div>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               主位置为必选，报名赛事时会自动带入；副位置不能与主位置相同。
+            </Typography.Text>
+          </Space>
+        ) : null}
+        {editKind === "avatar" ? (
+          <Space orientation="vertical" size={12} style={{ width: "100%" }}>
+            <div className="prof-emoji-grid">
+              {DEFAULT_AVATAR_OPTIONS.map((option) => (
+                <button
+                  className={draft.avatar === defaultAvatarPath(option.id) ? "selected" : ""}
+                  key={option.id}
+                  type="button"
+                  onClick={() => setDraft({ ...draft, avatar: defaultAvatarPath(option.id) })}
+                >
+                  <span style={{ backgroundImage: `url("${defaultAvatarPath(option.id)}")` }} />
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <Space size={12} wrap>
+              <Button
+                size="small"
+                icon={<ReloadOutlined />}
+                onClick={() => setDraft({ ...draft, avatar: randomDefaultAvatar() })}
+              >
+                随机换一个
+              </Button>
+              <Upload
+                accept="image/*"
+                showUploadList={false}
+                beforeUpload={(file) => {
+                  void uploadImage(file as File, "avatar");
+                  return false;
+                }}
+              >
+                <Button size="small" icon={<CameraOutlined />}>
+                  上传自定义头像（≤5MB）
+                </Button>
+              </Upload>
+            </Space>
+            <Typography.Text type="secondary">
+              注册时会随机发一个表情头像，随时可以在这里更换，也可以上传自己的图片
+              （圆形展示，建议使用正方形图片）。
             </Typography.Text>
           </Space>
         ) : null}
