@@ -8,7 +8,7 @@
 export const GAME_NAME_PATTERN = /^[\u4e00-\u9fa5\u3400-\u4dbfA-Za-z0-9]{1,16}#\d{3,6}$/;
 
 /** 游戏ID填写提示（个人资料弹窗与校验失败文案共用）。 */
-export const GAME_NAME_HINT = "名称#数字编号，例如 众生皆我#32250（名称仅限中文/字母/数字）";
+export const GAME_NAME_HINT = "名称#数字编号，例如 向阳而生#32250（名称仅限中文/字母/数字）";
 
 export function isValidGameName(value: string | null | undefined) {
   return GAME_NAME_PATTERN.test((value ?? "").trim());

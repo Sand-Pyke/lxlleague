@@ -128,7 +128,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
       // 资料齐全的老用户直接进首页；刚注册/资料没填全的用户先去个人主页补资料。
       // 核心管理员是系统账号，不参赛也不展示报名入口，因此同样直接进首页。
       const toProfile = result.profile_complete === false && result.is_admin !== true;
-      await messageApi.success(toProfile ? "登录成功，请先完善个人资料" : "登录成功", 2);
+      await messageApi.success(toProfile ? "登录成功" : "登录成功", 2);
       router.push(toProfile ? "/profile" : "/");
       router.refresh();
     } catch (reason) {

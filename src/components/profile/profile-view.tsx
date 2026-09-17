@@ -622,7 +622,7 @@ export function ProfileView() {
                     ))}
                     <p className="prof-settings-note">
                       游戏ID（召唤师名）用于战绩导入时匹配到你的账号，需与游戏内名称一致， 格式为
-                      名称#数字编号（例如 众生皆我#32250）。
+                      名称#数字编号（例如 向阳而生#32250）。
                     </p>
                     {missingForSignup.length ? (
                       <Alert
@@ -666,13 +666,6 @@ export function ProfileView() {
               <Card
                 className="antd-panel"
                 title="常用英雄"
-                extra={
-                  self ? (
-                    <Button size="small" type="link" onClick={() => openEdit("hero")}>
-                      设置
-                    </Button>
-                  ) : null
-                }
               >
                 {favoriteHeroes.length ? (
                   favoriteHeroes.map((name) => {
@@ -808,7 +801,7 @@ export function ProfileView() {
             <Input
               value={draft.gameName}
               maxLength={32}
-              placeholder="例如 众生皆我#32250"
+              placeholder="例如 向阳而生#32250"
               onChange={(event) => setDraft({ ...draft, gameName: event.target.value })}
             />
             <Typography.Text type="secondary">
