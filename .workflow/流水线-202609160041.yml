@@ -1,60 +1,113 @@
 version: "1.0"
-name: 构建、部署到自有主机
-displayName: 构建、部署到自有主机
+name: build-and-deploy-lxl
+displayName: Build and deploy LXL
+
 stages:
-- name: 构建
-  displayName: 构建
-  strategy: naturally
-  trigger: auto
-  steps:
-  - step: build@nodejs
-    name: ""
-    displayName: Nodejs 构建
-    nodeVersion: 14.16.0
-    commands:
-    - '# 设置NPM源，提升安装速度'
-    - npm config set registry https://registry.npmmirror.com
-    - ""
-    - '# 执行编译命令'
-    - npm install && npm run build
-    artifacts:
-    - name: BUILD_ARTIFACT
-      path:
-      - ./dist
-      type: .tar.gz
-    caches:
-    - "~/.npm"
-    - "~/.yarn"
-    notify: []
-    strategy:
-      retry: "0"
-      resource:
-        cpu: "2"
-        memory: "4"
-- name: 部署
-  displayName: 部署
-  strategy: naturally
-  trigger: auto
-  steps:
-  - step: deploy@agent
-    name: ""
-    displayName: 主机部署
-    deployArtifact:
-    - name: output
-      target: "~/gitee_go/deploy"
-      source: build
-      dependArtifact: BUILD_ARTIFACT
-      artifactRepository: default
-      artifactName: output
-      artifactVersion: latest
-    script: |-
-      # 请在此输入部署脚本，如启动Java应用如下
-      # nohup java -jar test.jar &gt; nohup.out &amp;
-       echo 'Hello Gitee!'
-    hostGroupID: {}
-    notify: []
-    strategy:
-      retry: "0"
+  - name: build
+    displayName: Build release
+    strategy: naturally
+    trigger: auto
+    steps:
+      - step: build@nodejs
+        displayName: Node 20 build and verify
+        nodeVersion: 20.19.0
+        commands:
+          - npm ci
+          - npm run db:generate
+          - npx tsc --noEmit --incremental false
+          - npm run build
+          - rm -rf .release
+          - mkdir .release
+          - cp -R Dockerfile docker-compose.yml docker-compose.prod.yml .dockerignore .env.example package.json package-lock.json next.config.ts tsconfig.json next-env.d.ts prisma public src .release/
+        artifacts:
+          - name: BUILD_ARTIFACT
+            path:
+              - ./.release
+            type: .tar.gz
+        caches:
+          - "~/.npm"
+        notify: []
+        strategy:
+          retry: "0"
+          resource:
+            cpu: "2"
+            memory: "4"
+
+  - name: deploy
+    displayName: Deploy with Docker Compose
+    strategy: naturally
+    trigger: auto
+    steps:
+      - step: deploy@agent
+        displayName: Host deployment
+        deployArtifact:
+          - name: BUILD_ARTIFACT
+            target: "~/gitee_go/deploy/lol-champion"
+            source: build
+            dependArtifact: BUILD_ARTIFACT
+            artifactRepository: default
+            artifactName: BUILD_ARTIFACT
+            artifactVersion: latest
+        script: |-
+          set -eu
+
+          DEPLOY_DIR="$HOME/gitee_go/deploy/lol-champion"
+          cd "$DEPLOY_DIR"
+
+          test -f Dockerfile || { echo "Missing Dockerfile in deployment artifact."; exit 1; }
+          test -f docker-compose.prod.yml || { echo "Missing docker-compose.prod.yml in deployment artifact."; exit 1; }
+          test -f .env || { echo "Missing production .env in $DEPLOY_DIR."; exit 1; }
+          chmod 600 .env
+
+          compose() {
+            docker compose -p lol-champion -f docker-compose.prod.yml --env-file .env "$@"
+          }
+
+          compose config --quiet
+
+          compose up -d db
+          attempt=0
+          until compose exec -T db sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null 2>&1; do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge 30 ]; then
+              echo "PostgreSQL did not become ready in time."
+              compose logs --tail=100 db
+              exit 1
+            fi
+            sleep 2
+          done
+
+          backup_dir="$HOME/gitee_go/backups/lol-champion"
+          mkdir -p "$backup_dir"
+          backup_sql="$backup_dir/pre_deploy_$(date +%Y%m%d_%H%M%S).sql"
+          compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$backup_sql"
+          test -s "$backup_sql" || { echo "Database backup failed."; exit 1; }
+          gzip "$backup_sql"
+          backup_file="$backup_sql.gz"
+          echo "Database backup created: $backup_file"
+
+          compose build --pull app
+          compose up -d --remove-orphans
+
+          attempt=0
+          until compose exec -T app node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge 40 ]; then
+              echo "Application health check failed."
+              compose ps
+              compose logs --tail=150 app
+              exit 1
+            fi
+            sleep 3
+          done
+
+          compose ps
+          echo "Deployment completed successfully."
+        hostGroupID: {}
+        notify: []
+        strategy:
+          retry: "0"
+
 triggers:
   trigger: manual
 notify: []
