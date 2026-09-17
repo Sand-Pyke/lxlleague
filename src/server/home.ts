@@ -38,11 +38,13 @@ export async function getHomeBoard() {
     championCount(),
     prisma.user.count(),
   ]);
-  // 榜单只统计打完过比赛的选手：没有任何赛果时返回空数组，由前端展示空状态。
-  const ranked = players.filter((player) => player.games > 0);
+  // 榜单只统计「有成绩」的选手：选手排行要求积分 > 0（全败为 0 分，不展示
+  // 0 胜率 0 MVP 的空行），MVP 榜要求真的拿过 MVP；没有任何赛果时返回空数组。
+  const ranked = players.filter((player) => player.points > 0);
   return NextResponse.json({
     rank_top: ranked.slice(0, 5).map(legacyPlayer),
-    mvp_top: [...ranked]
+    mvp_top: players
+      .filter((player) => player.mvp > 0)
       .sort((a, b) => b.mvp - a.mvp || b.points - a.points)
       .slice(0, 5)
       .map(legacyPlayer),
@@ -179,13 +181,15 @@ export async function getHomeBoardV2() {
   }
 
   const players = await listPlayerCards();
-  // 同 getHomeBoard：排行与 MVP 只统计有战绩的选手，无赛果时榜单为空。
-  const ranked = players.filter((player) => player.games > 0);
+  // 同 getHomeBoard：排行只算积分 > 0 的选手（全败为 0 分，不展示空行），
+  // MVP 榜只算拿过 MVP 的选手；无赛果时两者均为空数组。
+  const ranked = players.filter((player) => player.points > 0);
   return NextResponse.json({
     live_matches: liveMatches,
     rank_top: ranked.slice(0, 8).map(legacyPlayer),
     recent,
-    mvp_top: [...ranked]
+    mvp_top: players
+      .filter((player) => player.mvp > 0)
       .sort((a, b) => b.mvp - a.mvp)
       .slice(0, 4)
       .map(legacyPlayer),

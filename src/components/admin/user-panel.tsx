@@ -7,6 +7,7 @@ import {
   Card,
   Empty,
   Input,
+  Modal,
   Popconfirm,
   Select,
   Space,
@@ -19,7 +20,9 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useViewer } from "@/components/auth-provider";
+import { RankLabel } from "@/components/rank-label";
 import {
+  RANK_OPTIONS,
   REVIEW_STATUS_COLOR,
   REVIEW_STATUS_LABEL,
   REVIEW_STATUSES,
@@ -61,6 +64,9 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState<ReviewStatus | "ALL">("ALL");
   const [busyId, setBusyId] = useState<number | null>(null);
+  /** 正在重置段位的账号 + 选中的段位（undefined = 还没选）。 */
+  const [rankTarget, setRankTarget] = useState<AdminUser | null>(null);
+  const [rankValue, setRankValue] = useState<string | undefined>(undefined);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,7 +85,8 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
     void load();
   }, [load]);
 
-  /** 统一的动作包装：调用接口 → 提示后端返回的 msg → 刷新列表与顶部统计。 */
+  /** 统一的动作包装：调用接口 → 提示后端返回的 msg → 刷新列表与顶部统计。
+   *  返回是否成功，供弹窗之类的交互决定要不要关闭。 */
   const run = useCallback(
     async (action: () => Promise<Record<string, unknown>>, targetId: number, fallback: string) => {
       setBusyId(targetId);
@@ -88,8 +95,10 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
         message.success(successText(data, fallback));
         await load();
         onChanged?.();
+        return true;
       } catch (requestError) {
         message.error(errorText(requestError, fallback));
+        return false;
       } finally {
         setBusyId(null);
       }
@@ -132,8 +141,16 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
         user.profile ? (
           <Space orientation="vertical" size={0}>
             <Typography.Text>{user.profile.gameName || "未设置"}</Typography.Text>
-            {/* 待审核的新账号位置还没定；位置未填写时也不展示「未填写」占位。
-                段位由用户自行维护（修改需重新审核），后台不重复展示。 */}
+            {/* 注册时提交的段位（新账号审核）与改段位申请都在这里展示，审核员据此判断。 */}
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              <RankLabel rank={user.profile.rank} fallback="未设置" />
+              {user.pendingRank ? (
+                <Typography.Text type="warning" style={{ fontSize: 12 }}>
+                  {" → 审核中：" + user.pendingRank}
+                </Typography.Text>
+              ) : null}
+            </Typography.Text>
+            {/* 待审核的新账号位置还没定；位置未填写时也不展示「未填写」占位。 */}
             {user.status !== "PENDING" && !isUnsetPosition(user.profile.mainPosition) ? (
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                 {positionText(user.profile.mainPosition)}
@@ -274,6 +291,18 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
                 通过
               </Button>
             ) : null}
+            {/* 重置段位：直接写资料；普通管理员只能改普通用户，管理员账号只有 admin 能改
+              （服务端 assertCanManageUser 会再校验一次）。 */}
+            <Button
+              size="small"
+              loading={busyId === user.id}
+              onClick={() => {
+                setRankTarget(user);
+                setRankValue(user.profile?.rank || "");
+              }}
+            >
+              重置段位
+            </Button>
 
             {/* 待审核的新账号直接拒绝即可，不需要额外的删除入口。 */}
             {user.status !== "PENDING" ? (
@@ -299,55 +328,98 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
   ];
 
   return (
-    <Card
-      className="antd-panel"
-      title="用户管理"
-      extra={
-        <Space>
-          {pendingCount ? <Tag color="gold">{pendingCount} 个待审核</Tag> : null}
-          <Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>
-            刷新
-          </Button>
+    <>
+      <Card
+        className="antd-panel"
+        title="用户管理"
+        extra={
+          <Space>
+            {pendingCount ? <Tag color="gold">{pendingCount} 个待审核</Tag> : null}
+            <Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>
+              刷新
+            </Button>
+          </Space>
+        }
+      >
+        {error ? <Alert type="error" showIcon title={error} style={{ marginBottom: 12 }} /> : null}
+        <Space wrap style={{ marginBottom: 12 }}>
+          <Input.Search
+            allowClear
+            placeholder="搜索账号 / 游戏ID / KOOK"
+            style={{ width: 260 }}
+            value={keyword}
+            onChange={(event) => setKeyword(event.target.value)}
+          />
+          <Select
+            style={{ width: 150 }}
+            value={statusFilter}
+            onChange={(value) => setStatusFilter(value)}
+            options={[
+              { value: "ALL", label: "全部状态" },
+              ...REVIEW_STATUSES.map((status) => ({
+                value: status,
+                label: REVIEW_STATUS_LABEL[status],
+              })),
+            ]}
+          />
         </Space>
-      }
-    >
-      {error ? <Alert type="error" showIcon title={error} style={{ marginBottom: 12 }} /> : null}
-      <Space wrap style={{ marginBottom: 12 }}>
-        <Input.Search
-          allowClear
-          placeholder="搜索账号 / 游戏ID / KOOK"
-          style={{ width: 260 }}
-          value={keyword}
-          onChange={(event) => setKeyword(event.target.value)}
-        />
-        <Select
-          style={{ width: 150 }}
-          value={statusFilter}
-          onChange={(value) => setStatusFilter(value)}
-          options={[
-            { value: "ALL", label: "全部状态" },
-            ...REVIEW_STATUSES.map((status) => ({
-              value: status,
-              label: REVIEW_STATUS_LABEL[status],
-            })),
-          ]}
-        />
-      </Space>
-      {loading && !users.length ? (
-        <div className="loading-state">
-          <Spin size="large" />
-        </div>
-      ) : filtered.length ? (
-        <Table
-          rowKey="id"
-          size="small"
-          columns={columns}
-          dataSource={filtered}
-          pagination={{ pageSize: 10, showSizeChanger: false }}
-        />
-      ) : (
-        <Empty description="没有符合条件的账号" />
-      )}
-    </Card>
+        {loading && !users.length ? (
+          <div className="loading-state">
+            <Spin size="large" />
+          </div>
+        ) : filtered.length ? (
+          <Table
+            rowKey="id"
+            size="small"
+            columns={columns}
+            dataSource={filtered}
+            pagination={{ pageSize: 10, showSizeChanger: false }}
+          />
+        ) : (
+          <Empty description="没有符合条件的账号" />
+        )}
+      </Card>
+
+      <Modal
+        open={Boolean(rankTarget)}
+        title={`重置 ${rankTarget?.username ?? ""} 的段位`}
+        okText="保存"
+        cancelText="取消"
+        confirmLoading={busyId === rankTarget?.id}
+        onCancel={() => setRankTarget(null)}
+        onOk={async () => {
+          if (!rankTarget) return;
+          if (rankValue === undefined) {
+            message.warning("请先选择段位");
+            return;
+          }
+          const succeeded = await run(
+            () => postJson("/api/admin/users/rank", { userId: rankTarget.id, rank: rankValue }),
+            rankTarget.id,
+            "段位已重置",
+          );
+          if (succeeded) setRankTarget(null);
+        }}
+      >
+        <Space orientation="vertical" size={10} style={{ width: "100%" }}>
+          {/* 段位下拉与其他页面共用一套共享样式（virtual + .rank-dropdown）。 */}
+          <Select
+            style={{ width: "100%" }}
+            value={rankValue}
+            placeholder="选择段位"
+            virtual={false}
+            classNames={{ popup: { root: "rank-dropdown" } }}
+            options={RANK_OPTIONS.map((option) => ({
+              value: option.value,
+              label: <RankLabel rank={option.value} fallback="未设置" />,
+            }))}
+            onChange={(value) => setRankValue(value)}
+          />
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            重置后立即生效，并会同时清掉该账号待审的段位申请与备注。「未设置」表示清空段位。
+          </Typography.Text>
+        </Space>
+      </Modal>
+    </>
   );
 }

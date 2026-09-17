@@ -62,8 +62,9 @@ export default function RankingsPage() {
       .then((data) => setList(data.players ?? []))
       .catch(() => setList([]));
   }, []);
-  // 未参赛的选手还未产生积分，不进入榜单（选手中心仍会列出全部注册选手）。
-  const ranked = list.filter((player) => player.games > 0);
+  // 只有拿到过积分的选手才进榜单：全败也是 0 分，同样不展示
+  // （选手中心仍会列出全部注册选手）。
+  const ranked = list.filter((player) => player.points > 0);
   // 前三名已经由领奖台呈现，表格只从第 4 名开始列，避免同一批人出现两次。
   // 名次从完整榜单里取，表格自己不知道被截掉了几行。
   const placeOf = new Map(ranked.map((player, index) => [player.id, index + 1]));
