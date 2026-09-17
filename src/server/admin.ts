@@ -9,7 +9,8 @@ import {
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
-import { ApiError, badRequest, notFound } from "@/server/api";
+import { ApiError, badRequest, forbidden, notFound } from "@/server/api";
+import { assertCanManageUser, isCoreAdminActor } from "@/server/permissions";
 import { isPosition, matchBudget, rankFee, signRank } from "@/server/roster";
 import { listMatchRecords } from "@/server/records";
 
@@ -228,10 +229,12 @@ export async function adminUserList(viewerId?: number) {
  * 审核用户。段位是注册时提交、审核通过后锁定的资料：
  * 用户申请修改段位后会在 pendingRank 里挂一笔待审的新值，
  * 只有「通过」才真正写进资料；拒绝或打回则保留原段位。
- * 管理员账号不能被置为非 APPROVED，避免把自己锁在门外。
+ * 管理员账号不能被置为非 APPROVED，避免把自己锁在门外；
+ * 除核心管理员外，任何人都不能审核其他管理员账号。
  */
-export async function setUserStatus(userId: number, status: unknown) {
+export async function setUserStatus(userId: number, status: unknown, actorId: number) {
   if (!REVIEW_STATUSES.includes(status as ReviewStatus)) throw badRequest("审核参数无效");
+  await assertCanManageUser(actorId, userId);
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { isAdmin: true, username: true, pendingRank: true },
@@ -267,8 +270,9 @@ async function writeUserRank(userId: number, username: string, rank: string) {
 }
 
 /** 管理员直接改段位：同时清掉待审的段位申请，避免旧申请被重复应用。 */
-export async function setUserRank(userId: number, rank: string) {
+export async function setUserRank(userId: number, rank: string, actorId: number) {
   if (!RANKS.includes(rank)) throw badRequest("段位不合法");
+  await assertCanManageUser(actorId, userId);
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw badRequest("用户不存在");
 
@@ -280,7 +284,8 @@ export async function setUserRank(userId: number, rank: string) {
   return { msg: `已将 ${user.username} 段位改为「${stored || "未设置"}」` };
 }
 
-export async function setUserGameName(userId: number, gameName: string) {
+export async function setUserGameName(userId: number, gameName: string, actorId: number) {
+  await assertCanManageUser(actorId, userId);
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw badRequest("用户不存在");
   const value = gameName.trim().slice(0, 80);
@@ -293,8 +298,9 @@ export async function setUserGameName(userId: number, gameName: string) {
 }
 
 /** 管理员重置密码（原 /api/admin/reset_pwd）。 */
-export async function resetUserPassword(userId: number, password: string) {
+export async function resetUserPassword(userId: number, password: string, actorId: number) {
   if (typeof password !== "string" || password.length < 6) throw badRequest("新密码至少 6 位");
+  await assertCanManageUser(actorId, userId);
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { username: true } });
   if (!user) throw badRequest("用户不存在");
   await prisma.user.update({
@@ -304,7 +310,13 @@ export async function resetUserPassword(userId: number, password: string) {
   return { msg: `用户 ${user.username} 密码重置成功` };
 }
 
-export async function setUserAdmin(userId: number, isAdmin: boolean) {
+/**
+ * 调整管理员权限：只有核心管理员能操作，且不能改自己
+ * （核心管理员一旦取消自己的权限就再也无法恢复，只能改数据库）。
+ */
+export async function setUserAdmin(userId: number, isAdmin: boolean, actorId: number) {
+  if (!(await isCoreAdminActor(actorId))) throw forbidden("只有超级vip管理员可以调整管理员权限");
+  if (userId === actorId) throw badRequest("不能修改自己的管理员权限");
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw badRequest("用户不存在");
   await prisma.user.update({ where: { id: userId }, data: { isAdmin } });
@@ -333,11 +345,15 @@ export async function rotateImportToken(adminId: number) {
   return { token, msg: `导入令牌已重置，旧令牌立即失效` };
 }
 
-/** 删除用户：先清报名并同步各赛事人数，再删账号（资料/战绩随外键级联删除）。 */
+/**
+ * 删除用户：先清报名并同步各赛事人数，再删账号（资料/战绩随外键级联删除）。
+ * 管理员账号只有核心管理员能删。
+ */
 export async function deleteUser(userId: number, currentUserId: number) {
+  if (userId === currentUserId) throw badRequest("不能删除当前登录的管理员账号");
+  await assertCanManageUser(currentUserId, userId);
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw badRequest("用户不存在");
-  if (userId === currentUserId) throw badRequest("不能删除当前登录的管理员账号");
 
   const signups = await prisma.matchSignup.findMany({ where: { userId } });
   await prisma.$transaction(async (tx) => {

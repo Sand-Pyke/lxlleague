@@ -18,6 +18,7 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useViewer } from "@/components/auth-provider";
 import {
   REVIEW_STATUS_COLOR,
   REVIEW_STATUS_LABEL,
@@ -51,6 +52,9 @@ type AdminUser = {
 const formatTime = (value: string) => new Date(value).toLocaleString("zh-CN", { hour12: false });
 
 export function UserPanel({ onChanged }: { onChanged?: () => void }) {
+  const viewer = useViewer();
+  /** 核心管理员（admin）可以管理其他管理员；普通管理员只能管理用户。 */
+  const isCoreAdmin = Boolean(viewer?.isCoreAdmin);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -172,11 +176,85 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
       title: "操作",
       key: "actions",
       width: 200,
-      render: (_, user) => (
-        <Space wrap size={[4, 4]}>
-          {/* 待审核的新注册账号：只留「通过 / 拒绝」两个决定。 */}
-          {user.status === "PENDING" ? (
-            <>
+      render: (_, user) => {
+        // 管理员账号之间互不干涉：普通管理员既不展示也不能操作其他管理员
+        // （服务端会再校验一次，这里只是不让按钮出现在界面上）。
+        const manageable = !user.isAdmin || isCoreAdmin;
+        if (!manageable) {
+          return (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              管理员账号，无操作权限
+            </Typography.Text>
+          );
+        }
+
+        return (
+          <Space wrap size={[4, 4]}>
+            {/* 待审核的新注册账号：只留「通过 / 拒绝」两个决定。 */}
+            {user.status === "PENDING" ? (
+              <>
+                <Button
+                  size="small"
+                  type="primary"
+                  loading={busyId === user.id}
+                  onClick={() =>
+                    void run(
+                      () =>
+                        postJson("/api/admin/users/status", {
+                          userId: user.id,
+                          status: "APPROVED",
+                        }),
+                      user.id,
+                      "已通过审核",
+                    )
+                  }
+                >
+                  通过
+                </Button>
+                <Button
+                  size="small"
+                  danger
+                  loading={busyId === user.id}
+                  onClick={() =>
+                    void run(
+                      () =>
+                        postJson("/api/admin/users/status", {
+                          userId: user.id,
+                          status: "REJECTED",
+                        }),
+                      user.id,
+                      "已拒绝",
+                    )
+                  }
+                >
+                  拒绝
+                </Button>
+              </>
+            ) : null}
+
+            {/* 已通过的正式账号：权限只由核心管理员调整。 */}
+            {user.status === "APPROVED" && isCoreAdmin ? (
+              <Button
+                size="small"
+                loading={busyId === user.id}
+                onClick={() =>
+                  void run(
+                    () =>
+                      postJson("/api/admin/users/admin", {
+                        userId: user.id,
+                        isAdmin: !user.isAdmin,
+                      }),
+                    user.id,
+                    "管理员权限已更新",
+                  )
+                }
+              >
+                {user.isAdmin ? "取消管理员" : "设为管理员"}
+              </Button>
+            ) : null}
+
+            {/* 已拒绝的账号保留重新通过的退路（误操作后不用先打回待审核）。 */}
+            {user.status === "REJECTED" ? (
               <Button
                 size="small"
                 type="primary"
@@ -184,7 +262,10 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
                 onClick={() =>
                   void run(
                     () =>
-                      postJson("/api/admin/users/status", { userId: user.id, status: "APPROVED" }),
+                      postJson("/api/admin/users/status", {
+                        userId: user.id,
+                        status: "APPROVED",
+                      }),
                     user.id,
                     "已通过审核",
                   )
@@ -192,80 +273,28 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
               >
                 通过
               </Button>
-              <Button
-                size="small"
-                danger
-                loading={busyId === user.id}
-                onClick={() =>
-                  void run(
-                    () =>
-                      postJson("/api/admin/users/status", { userId: user.id, status: "REJECTED" }),
-                    user.id,
-                    "已拒绝",
-                  )
+            ) : null}
+
+            {/* 待审核的新账号直接拒绝即可，不需要额外的删除入口。 */}
+            {user.status !== "PENDING" ? (
+              <Popconfirm
+                title={`删除 ${user.username}？`}
+                description="该账号的报名与战绩会一并删除，且不可恢复。"
+                okText="删除"
+                okButtonProps={{ danger: true }}
+                cancelText="取消"
+                onConfirm={() =>
+                  run(() => postJson(`/api/admin/users/delete/${user.id}`), user.id, "用户已删除")
                 }
               >
-                拒绝
-              </Button>
-            </>
-          ) : null}
-
-          {/* 已通过的正式账号：只管权限与去留。 */}
-          {user.status === "APPROVED" ? (
-            <Button
-              size="small"
-              loading={busyId === user.id}
-              onClick={() =>
-                void run(
-                  () =>
-                    postJson("/api/admin/users/admin", { userId: user.id, isAdmin: !user.isAdmin }),
-                  user.id,
-                  "管理员权限已更新",
-                )
-              }
-            >
-              {user.isAdmin ? "取消管理员" : "设为管理员"}
-            </Button>
-          ) : null}
-
-          {/* 已拒绝的账号保留重新通过的退路（误操作后不用先打回待审核）。 */}
-          {user.status === "REJECTED" ? (
-            <Button
-              size="small"
-              type="primary"
-              loading={busyId === user.id}
-              onClick={() =>
-                void run(
-                  () =>
-                    postJson("/api/admin/users/status", { userId: user.id, status: "APPROVED" }),
-                  user.id,
-                  "已通过审核",
-                )
-              }
-            >
-              通过
-            </Button>
-          ) : null}
-
-          {/* 待审核的新账号直接拒绝即可，不需要额外的删除入口。 */}
-          {user.status !== "PENDING" ? (
-            <Popconfirm
-              title={`删除 ${user.username}？`}
-              description="该账号的报名与战绩会一并删除，且不可恢复。"
-              okText="删除"
-              okButtonProps={{ danger: true }}
-              cancelText="取消"
-              onConfirm={() =>
-                run(() => postJson(`/api/admin/users/delete/${user.id}`), user.id, "用户已删除")
-              }
-            >
-              <Button size="small" danger icon={<DeleteOutlined />} loading={busyId === user.id}>
-                删除
-              </Button>
-            </Popconfirm>
-          ) : null}
-        </Space>
-      ),
+                <Button size="small" danger icon={<DeleteOutlined />} loading={busyId === user.id}>
+                  删除
+                </Button>
+              </Popconfirm>
+            ) : null}
+          </Space>
+        );
+      },
     },
   ];
 

@@ -4,6 +4,6 @@ import { setUserAdmin } from "@/server/admin";
 
 export const dynamic = "force-dynamic";
 
-export const POST = adminRoute(async ({ body }) =>
-  setUserAdmin(requiredId(body.userId), Boolean(body.isAdmin)),
+export const POST = adminRoute(async ({ body, adminId }) =>
+  setUserAdmin(requiredId(body.userId), Boolean(body.isAdmin), adminId),
 );
