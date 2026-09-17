@@ -201,10 +201,11 @@ export async function register(request: NextRequest) {
 
 /**
  * 核心管理员账号名（与 prisma/seed.mjs 使用同一个环境变量）。
- * 该账号是运维用的系统账号、并非参赛选手：个人主页不展示段位/位置/排名与各项数据面板。
- * 其他被授予 isAdmin 的普通选手仍按普通用户展示。
+ * 该账号是运维用的系统账号、并非参赛选手：个人主页不展示段位/位置/排名与各项数据面板，
+ * 也不进入选手榜、参赛名单等比赛相关统计。
+ * 其他被授予 isAdmin 的普通选手仍是普通选手，因此各处过滤用它而不是 isAdmin。
  */
-const coreAdminUsername = process.env.ADMIN_USERNAME || "admin";
+export const coreAdminUsername = process.env.ADMIN_USERNAME || "admin";
 
 export const isCoreAdminUsername = (username: string | null | undefined) =>
   Boolean(username) && username === coreAdminUsername;

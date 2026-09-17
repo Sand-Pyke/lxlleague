@@ -1,6 +1,7 @@
 import type { Match as DbMatch } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { Match, Player } from "@/lib/data";
+import { coreAdminUsername } from "@/server/auth";
 import { listPlayerCards, playerCardByUserId, toPlayer } from "@/server/records";
 
 export function matchFrom(match: DbMatch, signed = false): Match {
@@ -43,11 +44,12 @@ export async function getMatchById(id: number) {
   return match ? matchFrom(match) : null;
 }
 
-/** 参赛名单：以报名记录为准（含队伍与位置槽），统计取该选手的战绩聚合。 */
+/** 参赛名单：以报名记录为准（含队伍与位置槽），统计取该选手的战绩聚合。
+    只有核心管理员的系统账号不参赛，其他管理员照常出现在名单里。 */
 export async function getMatchPlayers(matchId: number) {
   const [signups, records] = await Promise.all([
     prisma.matchSignup.findMany({
-      where: { matchId, user: { is: { isAdmin: false } } },
+      where: { matchId, user: { is: { username: { not: coreAdminUsername } } } },
       orderBy: [{ positionOrder: "asc" }, { createdAt: "asc" }],
       include: {
         user: {

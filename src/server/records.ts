@@ -2,6 +2,7 @@ import type { MatchGameRecord, PlayerProfile, User } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ApiError } from "@/server/api";
+import { coreAdminUsername } from "@/server/auth";
 
 /**
  * 对局战绩的写入与聚合（迁移自原 Flask 服务的 MatchResult 相关接口与
@@ -603,11 +604,11 @@ export function toPlayer(profile: ProfileWithUser, records: RankedRecord[]) {
 
 export type PlayerCard = ReturnType<typeof toPlayer>;
 
-/** 全部选手（含未参赛账号），按积分降序。 */
+/** 全部选手（含未参赛账号），按积分降序。只有核心管理员的系统账号不在其中。 */
 export async function listPlayerCards() {
   const [profiles, records] = await Promise.all([
     prisma.playerProfile.findMany({
-      where: { user: { is: { isAdmin: false } } },
+      where: { user: { is: { username: { not: coreAdminUsername } } } },
       include: {
         user: { select: { username: true, kookName: true, backgroundImage: true, status: true } },
       },
@@ -632,7 +633,7 @@ export async function listPlayerCards() {
 
 export async function playerCardByUserId(userId: number) {
   const profile = await prisma.playerProfile.findFirst({
-    where: { userId, user: { is: { isAdmin: false } } },
+    where: { userId, user: { is: { username: { not: coreAdminUsername } } } },
     include: { user: { select: { username: true, kookName: true, backgroundImage: true } } },
   });
   if (!profile) return null;
@@ -643,10 +644,17 @@ export async function playerCardByUserId(userId: number) {
   return toPlayer(profile, records);
 }
 
-/** 个人主页：统计 + 常用英雄 TOP3 + 全部对局历史（含参战率）。 */
-export async function profileOverview(userId: number, includeAdmin = false) {
+/**
+ * 个人主页：统计 + 常用英雄 TOP3 + 全部对局历史（含参战率）。
+ * includeCoreAdmin 只在本人查看自己的主页时为真：核心管理员的主页不对外展示，
+ * 其他管理员的主页与普通选手一样公开。
+ */
+export async function profileOverview(userId: number, includeCoreAdmin = false) {
   const profile = await prisma.playerProfile.findFirst({
-    where: includeAdmin ? { userId } : { userId, user: { is: { isAdmin: false } } },
+    where: {
+      userId,
+      user: { is: includeCoreAdmin ? {} : { username: { not: coreAdminUsername } } },
+    },
     include: { user: { select: { username: true, kookName: true, backgroundImage: true } } },
   });
   if (!profile) return null;
