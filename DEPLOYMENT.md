@@ -12,6 +12,8 @@ The application is deployed as two Docker Compose services: the Next.js API/appl
 
 The app listens on `APP_PORT` (default `3000`). Put a TLS reverse proxy such as Nginx or Caddy in front of it before exposing it publicly.
 
+Session cookies (`lxl_user_id`, `lxl_captcha`) are marked `Secure` only when the incoming request is HTTPS. The app trusts the `x-forwarded-proto` header first and falls back to the request protocol, so a reverse proxy must forward that header (Nginx: `proxy_set_header X-Forwarded-Proto $scheme;`). Because of this, accessing the app directly over plain HTTP also works, but TLS is still strongly recommended.
+
 ## Gitee workflow
 
 The checked-in Gitee Go workflow uses Node 20 to generate Prisma Client, type-check, build and package the release. The deployment agent then validates the production Compose file, starts PostgreSQL, creates a pre-deployment SQL backup, builds the application image and waits for `/api/health` to confirm both the application and database are available.

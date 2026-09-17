@@ -15,6 +15,19 @@ function captchaSignature(payload: string) {
   return createHmac("sha256", captchaSecret).update(payload).digest("base64url");
 }
 
+/**
+ * 本次请求是否经由 HTTPS 到达。
+ *
+ * 不能只看 NODE_ENV：生产环境如果直接以 HTTP 暴露（例如 http://<host>:3000，尚未接 TLS 反代），
+ * 带上 Secure 的 Cookie 会被浏览器直接丢弃，表现为「登录提示成功但仍然是未登录状态」。
+ * 反向代理透传 x-forwarded-proto 时以它为准，否则回退到本次请求自身的协议。
+ */
+function isSecureRequest(request: NextRequest) {
+  const forwarded = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+  if (forwarded) return forwarded === "https";
+  return request.nextUrl.protocol === "https:";
+}
+
 function captchaResponseError() {
   return NextResponse.json(
     { ok: false, code: "CAPTCHA_INVALID", error: "验证码错误或已过期，请重新获取" },
@@ -44,7 +57,7 @@ function isValidCaptcha(request: NextRequest, value: unknown) {
 }
 
 /** Creates a short-lived, signed arithmetic challenge for registration. */
-export function createCaptcha() {
+export function createCaptcha(request: NextRequest) {
   const left = randomInt(2, 10);
   const right = randomInt(1, 10);
   const expiresAt = Date.now() + captchaLifetimeSeconds * 1000;
@@ -53,7 +66,7 @@ export function createCaptcha() {
   response.cookies.set(captchaCookieName, `${payload}.${captchaSignature(payload)}`, {
     httpOnly: true,
     sameSite: "strict",
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecureRequest(request),
     path: "/api/register",
     maxAge: captchaLifetimeSeconds,
   });
@@ -106,12 +119,15 @@ function invalidInput() {
   return NextResponse.json({ ok: false, error: "用户名或密码格式不正确" }, { status: 400 });
 }
 
-function sessionResponse(user: { id: number; username: string; isAdmin: boolean }) {
+function sessionResponse(
+  user: { id: number; username: string; isAdmin: boolean },
+  request: NextRequest,
+) {
   const response = NextResponse.json({ ok: true, login: true, username: user.username });
   response.cookies.set(cookieName, String(user.id), {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecureRequest(request),
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   });
@@ -147,7 +163,7 @@ export async function signIn(request: NextRequest) {
       { status: 403 },
     );
   }
-  return sessionResponse(user);
+  return sessionResponse(user, request);
 }
 
 export async function register(request: NextRequest) {
