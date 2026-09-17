@@ -613,7 +613,7 @@ export function ProfileView() {
                         <span>
                           {row.label}：<b>{row.value}</b>
                         </span>
-                        {row.kind !== "account" && (
+                        {(row.kind !== "account" && row.kind !=='rank') && (
                           <Button size="small" type="link" onClick={() => openEdit(row.kind)}>
                             {row.value === "未设置" ? "设置" : "修改"}
                           </Button>

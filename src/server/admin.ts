@@ -12,6 +12,7 @@ import { randomDefaultAvatar } from "@/lib/default-avatars";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
 import { ApiError, badRequest, notFound } from "@/server/api";
+import { coreAdminUsername, isCoreAdminUsername } from "@/server/auth";
 import { isPosition, matchBudget, rankFee, signRank } from "@/server/roster";
 import { listMatchRecords } from "@/server/records";
 
@@ -27,6 +28,18 @@ async function requireMatch(matchId: number) {
   const match = await prisma.match.findUnique({ where: { id: matchId } });
   if (!match) throw notFound("赛事不存在");
   return match;
+}
+
+/** 只有核心管理员（admin 账号）才能执行设置管理员 / 重置密码等高危操作。 */
+async function requireCoreAdmin(adminId: number) {
+  const admin = await prisma.user.findUnique({
+    where: { id: adminId },
+    select: { username: true },
+  });
+  if (!admin || !isCoreAdminUsername(admin.username)) {
+    throw new ApiError(403, "只有超级vip管理员可以执行此操作");
+  }
+  return admin;
 }
 
 export async function createMatch(body: Record<string, unknown>) {
@@ -197,11 +210,15 @@ export async function teamsBoard(matchId: number) {
 
 /**
  * 管理员视角的用户列表（含审核状态与游戏资料）。
- * 当前登录的管理员自己不列进去：自己的账号在这里既管不了、也没必要看。
+ * 核心管理员（admin 账号）是系统账号，永远不进入用户管理列表；
+ * 当前登录的管理员自己也不列进去：自己的账号在这里既管不了、也没必要看。
  */
 export async function adminUserList(viewerId?: number) {
   const users = await prisma.user.findMany({
-    where: viewerId ? { id: { not: viewerId } } : undefined,
+    where: {
+      username: { not: coreAdminUsername },
+      ...(viewerId ? { id: { not: viewerId } } : {}),
+    },
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     select: {
       id: true,
@@ -240,6 +257,8 @@ export async function setUserStatus(userId: number, status: unknown) {
   });
   if (!user) throw notFound("用户不存在");
   const next = status as ReviewStatus;
+  if (isCoreAdminUsername(user.username))
+    throw new ApiError(403, "不能修改超级vip管理员账号的审核状态");
   if (user.isAdmin && next !== "APPROVED")
     throw new ApiError(409, "管理员账号不能被拒绝或设为待审核");
 
@@ -298,13 +317,16 @@ export async function setUserGameName(userId: number, gameName: string) {
 
 export const ADMIN_RESET_PASSWORD = "lxl123456";
 
-/** 管理员重置已注册用户密码，重置后必须通知用户尽快修改密码。 */
-export async function resetUserPassword(userId: number) {
+/** 只有核心管理员（admin 账号）能重置已注册用户密码，重置后必须通知用户尽快修改密码。 */
+export async function resetUserPassword(currentUserId: number, userId: number) {
+  await requireCoreAdmin(currentUserId);
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { username: true, status: true },
   });
   if (!user) throw badRequest("用户不存在");
+  if (isCoreAdminUsername(user.username))
+    throw new ApiError(403, "不能重置超级vip管理员账号的密码");
   if (user.status !== "APPROVED") throw badRequest("只有已注册用户可以重置密码");
   await prisma.user.update({
     where: { id: userId },
@@ -315,9 +337,18 @@ export async function resetUserPassword(userId: number) {
   };
 }
 
-export async function setUserAdmin(userId: number, isAdmin: boolean) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) throw badRequest("用户不存在");
+/** 只有核心管理员（admin 账号）能授予 / 撤销普通账号的管理员权限。 */
+export async function setUserAdmin(currentUserId: number, userId: number, isAdmin: boolean) {
+  await requireCoreAdmin(currentUserId);
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { username: true, isAdmin: true },
+  });
+  if (!user) throw notFound("用户不存在");
+  if (isCoreAdminUsername(user.username)) throw new ApiError(403, "不能修改超级vip管理员的权限");
+  if (user.isAdmin === isAdmin) {
+    return { msg: `用户 ${user.username} 已经是${isAdmin ? "管理员" : "普通用户"}` };
+  }
   await prisma.user.update({ where: { id: userId }, data: { isAdmin } });
   return { msg: `已将 ${user.username} ${isAdmin ? "设为管理员" : "取消管理员"}` };
 }
@@ -348,6 +379,7 @@ export async function rotateImportToken(adminId: number) {
 export async function deleteUser(userId: number, currentUserId: number) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw badRequest("用户不存在");
+  if (isCoreAdminUsername(user.username)) throw new ApiError(403, "不能删除超级vip管理员账号");
   if (userId === currentUserId) throw badRequest("不能删除当前登录的管理员账号");
 
   const signups = await prisma.matchSignup.findMany({ where: { userId } });

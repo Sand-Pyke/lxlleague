@@ -21,6 +21,7 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  RANK_OPTIONS,
   REVIEW_STATUS_COLOR,
   REVIEW_STATUS_LABEL,
   REVIEW_STATUSES,
@@ -28,7 +29,9 @@ import {
   positionText,
   type ReviewStatus,
 } from "@/lib/admin-options";
+import { RankLabel } from "@/components/rank-label";
 import { asArray, errorText, getJson, postJson, successText } from "./api-client";
+import { useViewer } from "../auth-provider";
 
 type AdminUser = {
   id: number;
@@ -61,6 +64,12 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [resetTarget, setResetTarget] = useState<AdminUser | null>(null);
   const [resetAcknowledged, setResetAcknowledged] = useState(false);
+  // 只有核心管理员（admin 账号）才能授予 / 撤销管理员，或重置其他账号的密码。
+  const viewer = useViewer();
+  const isCoreAdmin = viewer?.isCoreAdmin ?? false;
+  // 段位重置：先选中某条用户，再选段位，按钮区才会出现「重置段位」。
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [selectedRank, setSelectedRank] = useState<string | undefined>(undefined);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -99,6 +108,23 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
     [load, onChanged],
   );
 
+  const selectedUser =
+    selectedUserId === null ? null : (users.find((user) => user.id === selectedUserId) ?? null);
+
+  /** 重置选中用户的段位；成功后清空选择，列表刷新后即显示新段位。 */
+  async function resetSelectedRank() {
+    if (!selectedUser || selectedRank === undefined) return;
+    const success = await run(
+      () => postJson("/api/admin/users/rank", { userId: selectedUser.id, rank: selectedRank }),
+      selectedUser.id,
+      "段位已重置",
+    );
+    if (success) {
+      setSelectedUserId(null);
+      setSelectedRank(undefined);
+    }
+  }
+
   const filtered = useMemo(() => {
     const text = keyword.trim().toLowerCase();
     return users.filter((user) => {
@@ -133,14 +159,19 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
       ),
     },
     {
+      title: "段位",
+      key: "rank",
+      width: 120,
+      render: (_, user) => <RankLabel rank={user.profile?.rank} fallback="未设置" />,
+    },
+    {
       title: "游戏资料",
       key: "profile",
       render: (_, user) =>
         user.profile ? (
           <Space orientation="vertical" size={0}>
             <Typography.Text>{user.profile.gameName || "未设置"}</Typography.Text>
-            {/* 待审核的新账号位置还没定；位置未填写时也不展示「未填写」占位。
-                段位由用户自行维护（修改需重新审核），后台不重复展示。 */}
+            {/* 待审核的新账号位置还没定；位置未填写时也不展示「未填写」占位。 */}
             {user.status !== "PENDING" && !isUnsetPosition(user.profile.mainPosition) ? (
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                 {positionText(user.profile.mainPosition)}
@@ -221,36 +252,36 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
             </>
           ) : null}
 
-          {/* 已通过的正式账号：只管权限与去留。 */}
-          {user.status === "APPROVED" ? (
-            <>
-              <Button
-                size="small"
-                loading={busyId === user.id}
-                onClick={() =>
-                  void run(
-                    () =>
-                      postJson("/api/admin/users/admin", {
-                        userId: user.id,
-                        isAdmin: !user.isAdmin,
-                      }),
-                    user.id,
-                    "管理员权限已更新",
-                  )
-                }
-              >
-                {user.isAdmin ? "取消管理员" : "设为管理员"}
-              </Button>
-              <Button
-                size="small"
-                danger
-                icon={<KeyOutlined />}
-                loading={busyId === user.id}
-                onClick={() => openResetConfirm(user)}
-              >
-                重置密码
-              </Button>
-            </>
+          {/* 已通过的正式账号：核心管理员可管理权限与重置密码，去留仍对所有管理员开放。 */}
+          {user.status === "APPROVED" && isCoreAdmin ? (
+            <Button
+              size="small"
+              loading={busyId === user.id}
+              onClick={() =>
+                void run(
+                  () =>
+                    postJson("/api/admin/users/admin", {
+                      userId: user.id,
+                      isAdmin: !user.isAdmin,
+                    }),
+                  user.id,
+                  "管理员权限已更新",
+                )
+              }
+            >
+              {user.isAdmin ? "取消管理员" : "设为管理员"}
+            </Button>
+          ) : null}
+          {user.status === "APPROVED" && isCoreAdmin ? (
+            <Button
+              size="small"
+              danger
+              icon={<KeyOutlined />}
+              loading={busyId === user.id}
+              onClick={() => openResetConfirm(user)}
+            >
+              重置密码
+            </Button>
           ) : null}
 
           {/* 已拒绝的账号保留重新通过的退路（误操作后不用先打回待审核）。 */}
@@ -329,6 +360,29 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
           ]}
         />
       </Space>
+      {selectedUser ? (
+        <Space wrap style={{ marginBottom: 12 }}>
+          <Typography.Text>重置「{selectedUser.username}」的段位：</Typography.Text>
+          <Select
+            style={{ width: 150 }}
+            placeholder="选择段位"
+            allowClear
+            value={selectedRank}
+            onChange={(value) => setSelectedRank(value as string | undefined)}
+            options={RANK_OPTIONS}
+          />
+          {selectedRank !== undefined ? (
+            <Button
+              type="primary"
+              danger
+              loading={busyId === selectedUser.id}
+              onClick={() => void resetSelectedRank()}
+            >
+              重置段位
+            </Button>
+          ) : null}
+        </Space>
+      ) : null}
       {loading && !users.length ? (
         <div className="loading-state">
           <Spin size="large" />
@@ -339,6 +393,11 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
           size="small"
           columns={columns}
           dataSource={filtered}
+          rowSelection={{
+            type: "radio",
+            selectedRowKeys: selectedUserId === null ? [] : [selectedUserId],
+            onChange: (keys) => setSelectedUserId(keys.length ? Number(keys[0]) : null),
+          }}
           pagination={{ pageSize: 10, showSizeChanger: false }}
         />
       ) : (
