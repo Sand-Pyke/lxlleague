@@ -26,5 +26,8 @@ COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
 COPY --from=build /app/prisma ./prisma
 
+# 上传图片的落盘目录（生产环境由 compose 把宿主机目录挂到这里，见 UPLOAD_DIR）。
+RUN mkdir -p /app/data/uploads
+
 EXPOSE 3000
 CMD ["sh", "-c", "npx prisma migrate deploy && node prisma/seed.mjs && npm run start"]

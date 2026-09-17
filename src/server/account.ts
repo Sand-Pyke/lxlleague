@@ -6,16 +6,14 @@ import { prisma } from "@/lib/prisma";
 import { isBackgroundFile, BACKGROUND_PREFIX } from "@/lib/backgrounds";
 import { RANKS, RANK_REVIEW_NOTE, normalizeRank } from "@/lib/admin-options";
 import { getSessionUser, isCoreAdminUsername } from "@/server/auth";
+import { IMAGE_EXTS, uploadDir } from "@/server/uploads";
 
 /**
  * 选手自助资料端点（对应旧项目 app.py 里的 /api/user/* 与 /api/avatar/upload）。
  * 校验规则与文案照抄旧实现，方便前端沿用旧交互。
  */
 
-const IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-const avatarDir = path.join(process.cwd(), "public", "assets", "avatars");
-const backgroundDir = path.join(process.cwd(), "public", "assets", "user-bg");
 
 /** 旧的 JSON 端点统一回 {msg}（成功 200，失败 4xx），前端直接展示 msg。 */
 const message = (text: string, status = 200) => NextResponse.json({ msg: text }, { status });
@@ -72,15 +70,19 @@ async function readUpload(file: unknown): Promise<Upload> {
   return { ok: true, buffer, ext };
 }
 
-/** 同一个人的旧图片只留一张：删掉同前缀的历史文件。 */
-async function removeOldFiles(dir: string, prefix: string, keep: string) {
+/** 同一个人的旧图片只留一张：删掉目录里属于该用户的历史文件。 */
+async function removeOldFiles(dir: string, keep: string, isOwn: (name: string) => boolean) {
   const names = await readdir(dir).catch(() => [] as string[]);
   await Promise.all(
     names
-      .filter((name) => name.startsWith(prefix) && name !== keep)
+      .filter((name) => name !== keep && isOwn(name))
       .map((name) => unlink(path.join(dir, name)).catch(() => undefined)),
   );
 }
+
+/** 带时间戳的新命名（u3_1789...jpg）与旧命名（u3.jpg）都算这个用户自己的文件。 */
+const isOwnUpload = (name: string, userId: number) =>
+  name.startsWith(`u${userId}_`) || IMAGE_EXTS.some((ext) => name === `u${userId}${ext}`);
 
 /** 游戏ID（召唤师名，战绩导入时按它匹配账号）。 */
 export async function updateGameName(request: NextRequest) {
@@ -231,10 +233,11 @@ export async function uploadAvatar(request: NextRequest) {
   const form = await request.formData().catch(() => null);
   const upload = await readUpload(form?.get("avatar"));
   if (!upload.ok) return message(upload.error, 400);
-  await mkdir(avatarDir, { recursive: true });
-  const name = `u${userId}_${Math.floor(Date.now() / 1000)}${upload.ext}`;
-  await writeFile(path.join(avatarDir, name), upload.buffer);
-  await removeOldFiles(avatarDir, `u${userId}_`, name);
+  const dir = uploadDir("avatars");
+  await mkdir(dir, { recursive: true });
+  const name = `u${userId}_${Date.now()}${upload.ext}`;
+  await writeFile(path.join(dir, name), upload.buffer);
+  await removeOldFiles(dir, name, (candidate) => isOwnUpload(candidate, userId));
   const avatar = `/assets/avatars/${name}`;
   await ensureProfile(userId);
   await prisma.playerProfile.update({ where: { userId }, data: { avatar } });
@@ -260,10 +263,11 @@ export async function uploadBackground(request: NextRequest) {
   const form = await request.formData().catch(() => null);
   const upload = await readUpload(form?.get("bg"));
   if (!upload.ok) return message(upload.error, 400);
-  await mkdir(backgroundDir, { recursive: true });
-  const name = `u${userId}${upload.ext}`;
-  await removeOldFiles(backgroundDir, `u${userId}.`, name);
-  await writeFile(path.join(backgroundDir, name), upload.buffer);
+  const dir = uploadDir("user-bg");
+  await mkdir(dir, { recursive: true });
+  const name = `u${userId}_${Date.now()}${upload.ext}`;
+  await writeFile(path.join(dir, name), upload.buffer);
+  await removeOldFiles(dir, name, (candidate) => isOwnUpload(candidate, userId));
   const backgroundImage = `/assets/user-bg/${name}`;
   await prisma.user.update({ where: { id: userId }, data: { backgroundImage } });
   return NextResponse.json({ msg: "背景已更新", background: backgroundImage });
