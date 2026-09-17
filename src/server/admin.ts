@@ -8,6 +8,7 @@ import {
 } from "@/lib/admin-options";
 import { prisma } from "@/lib/prisma";
 import { GAME_NAME_HINT, isValidGameName } from "@/lib/game-name";
+import { passwordFormatError } from "@/lib/credentials";
 import { randomDefaultAvatar } from "@/lib/default-avatars";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
@@ -298,7 +299,8 @@ export async function setUserGameName(userId: number, gameName: string) {
 
 /** 管理员重置密码（原 /api/admin/reset_pwd）。 */
 export async function resetUserPassword(userId: number, password: string) {
-  if (typeof password !== "string" || password.length < 6) throw badRequest("新密码至少 6 位");
+  const passwordError = passwordFormatError(typeof password === "string" ? password : "");
+  if (passwordError) throw badRequest(passwordError);
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { username: true } });
   if (!user) throw badRequest("用户不存在");
   await prisma.user.update({

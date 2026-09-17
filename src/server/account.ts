@@ -9,6 +9,7 @@ import { RANKS, RANK_REVIEW_NOTE, normalizeRank, normalizeSubPosition } from "@/
 import { GAME_NAME_HINT, isValidGameName } from "@/lib/game-name";
 import { MAX_FAVORITE_HEROES, formatFavoriteHeroes } from "@/lib/favorite-heroes";
 import { canonicalChampionName } from "@/lib/game-assets";
+import { passwordFormatError, usernameFormatError } from "@/lib/credentials";
 import { getSessionUser, isCoreAdminUsername } from "@/server/auth";
 import { IMAGE_EXTS, uploadDir } from "@/server/uploads";
 
@@ -143,7 +144,9 @@ export async function changePassword(request: NextRequest) {
   if (!user || !(await bcrypt.compare(oldPassword, user.passwordHash))) {
     return message("原密码错误", 400);
   }
-  if (!newPassword) return message("新密码不能为空", 400);
+  // 新密码与注册走同一套策略：长度 6-64、可打印 ASCII（不支持中文与空格）。
+  const passwordError = passwordFormatError(newPassword);
+  if (passwordError) return message(passwordError, 400);
   await prisma.user.update({
     where: { id: userId },
     data: { passwordHash: await bcrypt.hash(newPassword, 12) },
@@ -236,9 +239,9 @@ export async function changeUsername(request: NextRequest) {
   const userId = await currentUserId(request);
   if (!userId) return message("请先登录", 401);
   const username = text((await jsonBody(request)).username).trim();
-  if (!/^[\w\u4e00-\u9fa5]{2,16}$/.test(username)) {
-    return message("账户ID仅限中文/字母/数字/下划线，2-16个字符", 400);
-  }
+  // 与注册共用同一份账户ID规则：只允许 ASCII 字母/数字/下划线（不再接受中文）。
+  const usernameError = usernameFormatError(username);
+  if (usernameError) return message(usernameError, 400);
   const [taken, user] = await Promise.all([
     prisma.user.findFirst({ where: { username, NOT: { id: userId } }, select: { id: true } }),
     prisma.user.findUnique({

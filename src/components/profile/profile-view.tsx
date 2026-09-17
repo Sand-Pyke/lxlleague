@@ -51,6 +51,12 @@ import {
   randomDefaultAvatar,
 } from "@/lib/default-avatars";
 import { MAX_FAVORITE_HEROES } from "@/lib/favorite-heroes";
+import {
+  PASSWORD_HINT,
+  passwordFormatError,
+  USERNAME_HINT,
+  usernameFormatError,
+} from "@/lib/credentials";
 import { GAME_NAME_HINT, isValidGameName } from "@/lib/game-name";
 import { championChoices, championIcon, itemIcon } from "@/lib/game-assets";
 import { missingSignupRequirements } from "@/lib/profile-requirements";
@@ -270,9 +276,19 @@ export function ProfileView() {
       messageApi.error("请选择主位置");
       return;
     }
-    if (editKind === "pwd" && !draft.newPwd) {
-      messageApi.error("请输入新密码");
-      return;
+    if (editKind === "pwd") {
+      const passwordError = passwordFormatError(draft.newPwd);
+      if (passwordError) {
+        messageApi.error(passwordError);
+        return;
+      }
+    }
+    if (editKind === "account") {
+      const usernameError = usernameFormatError(draft.accountName.trim());
+      if (usernameError) {
+        messageApi.error(usernameError);
+        return;
+      }
     }
     if (editKind === "rank" && !draft.rank) {
       messageApi.error("请选择段位");
@@ -835,11 +851,13 @@ export function ProfileView() {
           <Space orientation="vertical" size={6} style={{ width: "100%" }}>
             <Input
               value={draft.accountName}
-              maxLength={16}
-              placeholder="账户ID（2-16 个字符）"
+              maxLength={24}
+              placeholder={USERNAME_HINT}
               onChange={(event) => setDraft({ ...draft, accountName: event.target.value })}
             />
-            <Typography.Text type="secondary">修改后请使用新账户ID登录。</Typography.Text>
+            <Typography.Text type="secondary">
+              修改后请使用新账户ID登录；账户ID不支持中文。
+            </Typography.Text>
           </Space>
         ) : null}
         {editKind === "pwd" ? (
@@ -851,7 +869,7 @@ export function ProfileView() {
             />
             <Input.Password
               value={draft.newPwd}
-              placeholder="新密码"
+              placeholder={`新密码（${PASSWORD_HINT}）`}
               onChange={(event) => setDraft({ ...draft, newPwd: event.target.value })}
             />
           </Space>

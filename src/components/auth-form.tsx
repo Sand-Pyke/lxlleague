@@ -24,6 +24,13 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { RankLabel } from "@/components/rank-label";
 import { REGISTER_RANK_OPTIONS } from "@/lib/admin-options";
+import {
+  PASSWORD_HINT,
+  passwordFormatError,
+  USERNAME_HINT,
+  usernameCharsetError,
+  usernameFormatError,
+} from "@/lib/credentials";
 
 type AuthMode = "login" | "register";
 
@@ -34,6 +41,27 @@ type AuthValues = {
   rank?: string;
   captchaAnswer?: string;
 };
+
+/**
+ * 账户ID 里不允许中文（以及空格、全角符号）。注册走严格规则，登录只拦字符集，
+ * 这样历史上带 `.` / `-` 的老账号仍能登录。校验函数直接复用服务端的那一份。
+ */
+function usernameValidator(mode: AuthMode) {
+  return (_rule: unknown, value: unknown) => {
+    const username = typeof value === "string" ? value.trim() : "";
+    if (!username) return Promise.resolve();
+    const error =
+      mode === "register" ? usernameFormatError(username) : usernameCharsetError(username);
+    return error ? Promise.reject(new Error(error)) : Promise.resolve();
+  };
+}
+
+function passwordValidator(_rule: unknown, value: unknown) {
+  const password = typeof value === "string" ? value : "";
+  if (!password) return Promise.resolve();
+  const error = passwordFormatError(password);
+  return error ? Promise.reject(new Error(error)) : Promise.resolve();
+}
 
 /** 段位选项带图标，与站内其它段位展示保持一致。 */
 const RANK_ICON_OPTIONS = REGISTER_RANK_OPTIONS.map((option) => ({
@@ -128,11 +156,12 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
               rules={[
                 { required: true, message: "请输入用户名" },
                 { min: 2, max: 24, message: "用户名长度应为 2 至 24 个字符" },
+                { validator: usernameValidator(mode) },
               ]}
             >
               <Input
                 prefix={<UserOutlined />}
-                placeholder="输入用户名"
+                placeholder={USERNAME_HINT}
                 size="large"
                 autoComplete="username"
               />
@@ -140,14 +169,11 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
             <Form.Item
               name="password"
               label="密码"
-              rules={[
-                { required: true, message: "请输入密码" },
-                { min: 6, message: "密码至少需要 6 个字符" },
-              ]}
+              rules={[{ required: true, message: "请输入密码" }, { validator: passwordValidator }]}
             >
               <Input.Password
                 prefix={<LockOutlined />}
-                placeholder="至少 6 个字符"
+                placeholder={PASSWORD_HINT}
                 size="large"
                 autoComplete={isRegister ? "new-password" : "current-password"}
               />
@@ -192,7 +218,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                   type="warning"
                   showIcon
                   title="请如实填写真实段位"
-                  description="段位将用于赛事分组与结算。若后续被发现有炸鱼（高段位选手用低段位账号参赛）行为，将受到处罚。"
+                  description="段位将用于赛事分组与结算，若后续被发现有炸鱼行为，将受到处罚。"
                 />
                 <Form.Item
                   name="captchaAnswer"
