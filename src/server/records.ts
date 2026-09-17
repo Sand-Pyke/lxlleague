@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { parseFavoriteHeroes } from "@/lib/favorite-heroes";
 import { ApiError } from "@/server/api";
 import { coreAdminUsername } from "@/server/auth";
+import { assertCanManageUser } from "@/server/permissions";
 
 /**
  * 对局战绩的写入与聚合（迁移自原 Flask 服务的 MatchResult 相关接口与
@@ -432,7 +433,9 @@ export async function listUserRecords(userId: number) {
   };
 }
 
-export async function clearUserRecords(userId: number) {
+export async function clearUserRecords(userId: number, actorId: number) {
+  // 管理员只能清普通选手的战绩，不能动其他管理员。
+  await assertCanManageUser(actorId, userId);
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { username: true },
