@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { normalizeSubPosition } from "@/lib/admin-options";
+import { missingSignupRequirements } from "@/lib/profile-requirements";
 import { getSessionUser, getViewer, isCoreAdminUsername } from "@/server/auth";
 import {
   cancelSignupForMatch,
@@ -367,9 +369,27 @@ async function signupOptionsFrom(request: NextRequest): Promise<SignupOptions | 
     return NextResponse.json({ error: "副位置不合法" }, { status: 400 });
   return {
     mainPosition: main,
-    subPosition: sub,
+    // 副位置与主位置相同时按「无副位置」处理，避免出现自相矛盾的报名记录。
+    subPosition: normalizeSubPosition(main, String(sub)),
     canSubstitute: Boolean(body.can_substitute ?? body.canSubstitute),
   };
+}
+
+/** 报名前的资料校验：未补全的资料项（空数组表示可以报名）。 */
+async function missingSignupFields(userId: number) {
+  const account = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      kookName: true,
+      profile: { select: { gameName: true, mainPosition: true, rank: true } },
+    },
+  });
+  return missingSignupRequirements({
+    gameName: account?.profile?.gameName ?? "",
+    mainPosition: account?.profile?.mainPosition ?? "",
+    rank: account?.profile?.rank ?? "",
+    kookName: account?.kookName ?? "",
+  });
 }
 
 export async function updateSignup(request: NextRequest, id: string, action: "signup" | "cancel") {
@@ -382,6 +402,12 @@ export async function updateSignup(request: NextRequest, id: string, action: "si
   if (action === "signup") {
     const options = await signupOptionsFrom(request);
     if (options instanceof NextResponse) return options;
+    const missing = await missingSignupFields(user.id);
+    if (missing.length)
+      return NextResponse.json(
+        { error: `报名前请先在「我的资料」补全：${missing.join("、")}`, missing },
+        { status: 400 },
+      );
     result = await signupForMatch(matchId, user.id, options);
   } else {
     result = await cancelSignupForMatch(matchId, user.id);
@@ -414,6 +440,13 @@ export async function getMatchPageData(id: number) {
           isCoreAdmin: isCoreAdminUsername(viewer.username),
           mainPosition: viewer.profile?.mainPosition ?? "",
           subPosition: viewer.profile?.subPosition ?? "",
+          // 报名前必须补全的资料（空数组 = 资料完善），供赛事页决定是否展示报名按钮。
+          missingFields: missingSignupRequirements({
+            gameName: viewer.profile?.gameName ?? "",
+            mainPosition: viewer.profile?.mainPosition ?? "",
+            rank: viewer.profile?.rank ?? "",
+            kookName: viewer.kookName ?? "",
+          }),
         }
       : null,
     signed: signup

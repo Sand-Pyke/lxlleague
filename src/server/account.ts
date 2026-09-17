@@ -4,7 +4,10 @@ import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isBackgroundFile, BACKGROUND_PREFIX } from "@/lib/backgrounds";
-import { RANKS, RANK_REVIEW_NOTE, normalizeRank } from "@/lib/admin-options";
+import { RANKS, RANK_REVIEW_NOTE, normalizeRank, normalizeSubPosition } from "@/lib/admin-options";
+import { GAME_NAME_HINT, isValidGameName } from "@/lib/game-name";
+import { MAX_FAVORITE_HEROES, formatFavoriteHeroes } from "@/lib/favorite-heroes";
+import { canonicalChampionName } from "@/lib/game-assets";
 import { getSessionUser, isCoreAdminUsername } from "@/server/auth";
 import { IMAGE_EXTS, uploadDir } from "@/server/uploads";
 
@@ -30,6 +33,7 @@ async function jsonBody(request: NextRequest) {
 /**
  * 早期账号（seed 出来的管理员等）可能没有资料行，注册流程才会建。
  * 自助编辑与个人主页都按「资料行必须存在」处理，缺失时按账号名补一条。
+ * 游戏ID不再复用账号名（需选手自己按游戏内昵称填写），这里留空等待补全。
  */
 export async function ensureProfile(userId: number) {
   const existing = await prisma.playerProfile.findUnique({
@@ -40,7 +44,7 @@ export async function ensureProfile(userId: number) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { username: true } });
   if (!user) return;
   await prisma.playerProfile
-    .create({ data: { userId, name: user.username, gameName: user.username } })
+    .create({ data: { userId, name: user.username, gameName: "" } })
     .catch(() => undefined);
 }
 
@@ -84,15 +88,36 @@ async function removeOldFiles(dir: string, keep: string, isOwn: (name: string) =
 const isOwnUpload = (name: string, userId: number) =>
   name.startsWith(`u${userId}_`) || IMAGE_EXTS.some((ext) => name === `u${userId}${ext}`);
 
-/** 游戏ID（召唤师名，战绩导入时按它匹配账号）。 */
+/** 游戏ID（召唤师名，战绩导入时按它匹配账号）：名称#数字，需选手自己填写。 */
 export async function updateGameName(request: NextRequest) {
   const userId = await currentUserId(request);
   if (!userId) return message("请先登录", 401);
   const body = await jsonBody(request);
-  const gameName = text(body.game_name).trim().slice(0, 80);
+  const gameName = text(body.game_name).trim();
+  if (!isValidGameName(gameName)) return message(`游戏ID格式不正确：${GAME_NAME_HINT}`, 400);
   await ensureProfile(userId);
   await prisma.playerProfile.update({ where: { userId }, data: { gameName } });
   return message("游戏ID已保存");
+}
+
+/** 常用英雄（最多 3 个）：统一成落库用的英雄称号后去重保存。 */
+export async function updateFavoriteHeroes(request: NextRequest) {
+  const userId = await currentUserId(request);
+  if (!userId) return message("请先登录", 401);
+  const body = await jsonBody(request);
+  const raw = Array.isArray(body.heroes) ? body.heroes : [];
+  const heroes: string[] = [];
+  for (const item of raw) {
+    const name = canonicalChampionName(text(item));
+    if (name && !heroes.includes(name)) heroes.push(name);
+    if (heroes.length >= MAX_FAVORITE_HEROES) break;
+  }
+  await ensureProfile(userId);
+  await prisma.playerProfile.update({
+    where: { userId },
+    data: { favoriteHeroes: formatFavoriteHeroes(heroes) },
+  });
+  return message(heroes.length ? "常用英雄已保存" : "常用英雄已清空");
 }
 
 /** 修改自己的密码。 */
@@ -123,11 +148,12 @@ export async function updatePosition(request: NextRequest) {
   if (!userId) return message("请先登录", 401);
   const body = await jsonBody(request);
   const mainPosition = text(body.main_pos).trim();
-  const subPosition = text(body.sub_pos).trim();
+  const rawSub = text(body.sub_pos).trim();
   const valid = ["TOP", "JUG", "MID", "ADC", "SUP", "无", ""];
-  if (!valid.includes(mainPosition) || !valid.includes(subPosition)) {
+  if (!valid.includes(mainPosition) || !valid.includes(rawSub)) {
     return message("位置不合法", 400);
   }
+  const subPosition = normalizeSubPosition(mainPosition, rawSub);
   await ensureProfile(userId);
   await prisma.playerProfile.update({
     where: { userId },

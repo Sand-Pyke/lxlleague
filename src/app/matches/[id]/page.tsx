@@ -75,6 +75,7 @@ export default async function MatchDetail({ params }: { params: Promise<{ id: st
               signed={Boolean(signed)}
               defaultMain={viewer?.mainPosition ?? ""}
               defaultSub={viewer?.subPosition ?? ""}
+              missingFields={viewer?.missingFields ?? []}
             />
             <Link className="button ghost" href={`/matches/${match.id}/lineup`}>
               查看对阵

@@ -4,18 +4,17 @@ import { Checkbox, Modal, Radio, Space, Typography, message } from "antd";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  NO_SUB_POSITION,
+  POSITION_LABEL,
+  POSITION_OPTIONS,
+  normalizeSubPosition,
+  subPositionChoices,
+} from "@/lib/admin-options";
 
-const POSITIONS = ["TOP", "JUG", "MID", "ADC", "SUP"] as const;
-const POSITION_LABELS: Record<string, string> = {
-  TOP: "上单",
-  JUG: "打野",
-  MID: "中单",
-  ADC: "射手",
-  SUP: "辅助",
-};
+const isPosition = (value: string) => POSITION_OPTIONS.includes(value);
 
-const isPosition = (value: string): value is (typeof POSITIONS)[number] =>
-  (POSITIONS as readonly string[]).includes(value);
+const positionLabel = (position: string) => POSITION_LABEL[position] ?? position;
 
 type Props = {
   matchId: number;
@@ -28,6 +27,8 @@ type Props = {
   /** 个人主页默认位置，可能为 FILL（未设置） */
   defaultMain: string;
   defaultSub: string;
+  /** 报名前还缺的资料项（空数组 = 资料完善） */
+  missingFields: string[];
 };
 
 /** 报名 / 取消报名按钮与选位置弹窗（沿用旧报名弹窗的 main_pos、sub_pos、can_substitute）。 */
@@ -39,13 +40,14 @@ export function MatchSignup({
   isCoreAdmin,
   defaultMain,
   defaultSub,
+  missingFields,
 }: Props) {
   const router = useRouter();
   const [messageApi, contextHolder] = message.useMessage();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [mainPos, setMainPos] = useState(isPosition(defaultMain) ? defaultMain : "");
-  const [subPos, setSubPos] = useState(isPosition(defaultSub) ? defaultSub : "无");
+  const [subPos, setSubPos] = useState(isPosition(defaultSub) ? defaultSub : NO_SUB_POSITION);
   const [canSubstitute, setCanSubstitute] = useState(false);
 
   if (!signable) {
@@ -59,6 +61,23 @@ export function MatchSignup({
         登录后报名
       </Link>
     );
+  }
+  // 资料没填全就先不让报名，直接给出补全入口，避免提交后才被服务端拒绝。
+  if (missingFields.length) {
+    return (
+      <div className="signup-blocked">
+        <Link className="button primary" href="/profile">
+          完善资料后报名
+        </Link>
+        <span className="signup-blocked-note">报名前需补全：{missingFields.join("、")}</span>
+      </div>
+    );
+  }
+
+  /** 主位置变化时同步刷新副位置：副位置不能与主位置相同。 */
+  function selectMain(next: string) {
+    setMainPos(next);
+    setSubPos((current) => normalizeSubPosition(next, current));
   }
 
   async function submit() {
@@ -131,11 +150,11 @@ export function MatchSignup({
             <Radio.Group
               className="signup-positions"
               value={mainPos}
-              onChange={(event) => setMainPos(event.target.value)}
+              onChange={(event) => selectMain(event.target.value)}
             >
-              {POSITIONS.map((position) => (
+              {POSITION_OPTIONS.map((position) => (
                 <Radio.Button key={position} value={position}>
-                  {POSITION_LABELS[position]}
+                  {positionLabel(position)}
                 </Radio.Button>
               ))}
             </Radio.Group>
@@ -147,10 +166,11 @@ export function MatchSignup({
               value={subPos}
               onChange={(event) => setSubPos(event.target.value)}
             >
-              <Radio.Button value="无">无</Radio.Button>
-              {POSITIONS.map((position) => (
+              <Radio.Button value={NO_SUB_POSITION}>无</Radio.Button>
+              {/* 主位置选好后，副位置列表里就不再出现它。 */}
+              {subPositionChoices(mainPos).map((position) => (
                 <Radio.Button key={position} value={position}>
-                  {POSITION_LABELS[position]}
+                  {positionLabel(position)}
                 </Radio.Button>
               ))}
             </Radio.Group>

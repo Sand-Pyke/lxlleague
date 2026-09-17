@@ -7,6 +7,7 @@ import {
   type ReviewStatus,
 } from "@/lib/admin-options";
 import { prisma } from "@/lib/prisma";
+import { GAME_NAME_HINT, isValidGameName } from "@/lib/game-name";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
 import { ApiError, badRequest, notFound } from "@/server/api";
@@ -259,7 +260,7 @@ async function writeUserRank(userId: number, username: string, rank: string) {
     prisma.playerProfile.upsert({
       where: { userId },
       update: { rank: stored },
-      create: { userId, name: username, gameName: username, rank: stored },
+      create: { userId, name: username, gameName: "", rank: stored },
     }),
     prisma.matchSignup.updateMany({ where: { userId }, data: { rankAtSignup: stored } }),
   ]);
@@ -283,7 +284,9 @@ export async function setUserRank(userId: number, rank: string) {
 export async function setUserGameName(userId: number, gameName: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw badRequest("用户不存在");
-  const value = gameName.trim().slice(0, 80);
+  // 允许清空（留空表示还未填写），但填了就必须符合 名称#数字编号 的格式。
+  const value = gameName.trim();
+  if (value && !isValidGameName(value)) throw badRequest(`游戏ID格式不正确：${GAME_NAME_HINT}`);
   await prisma.playerProfile.upsert({
     where: { userId },
     update: { gameName: value },

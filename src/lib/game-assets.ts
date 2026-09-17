@@ -89,5 +89,36 @@ export function formatGold(value: number | string | null | undefined) {
 /** 英雄输入框的联想列表（旧项目用 h.name 作为 datalist 选项）。 */
 export const championOptions = champions.map((champion) => champion.name);
 
+export type ChampionChoice = {
+  /** 落库用的英雄名（中文称号，与战绩录入的英雄名同一套写法）。 */
+  value: string;
+  label: string;
+  /** 搜索关键词：中文称号 + 英雄名 + 英文别名。 */
+  keywords: string;
+  icon: string;
+};
+
+/** 「常用英雄」选择器候选项；同名的英雄只保留一条，避免选择器出现重复项。 */
+const championChoiceSeen = new Set<string>();
+export const championChoices: ChampionChoice[] = champions.reduce<ChampionChoice[]>(
+  (choices, champion) => {
+    if (!champion.name || championChoiceSeen.has(champion.name)) return choices;
+    championChoiceSeen.add(champion.name);
+    choices.push({
+      value: champion.name,
+      label: champion.title ? `${champion.name} · ${champion.title}` : champion.name,
+      keywords: [champion.name, champion.title, champion.alias].filter(Boolean).join(" "),
+      icon: champion.img,
+    });
+    return choices;
+  },
+  [],
+);
+
+/** 把英雄名（称号 / 英雄名 / 英文别名都认）统一成落库用的中文称号。 */
+export function canonicalChampionName(name: string | null | undefined) {
+  return championAsset(name)?.name ?? (name ?? "").trim();
+}
+
 /** 装备输入框的联想列表。 */
 export const itemOptions = items.map((item) => item.name);

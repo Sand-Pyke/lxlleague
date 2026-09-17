@@ -1,6 +1,7 @@
 import type { MatchGameRecord, PlayerProfile, User } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { parseFavoriteHeroes } from "@/lib/favorite-heroes";
 import { ApiError } from "@/server/api";
 import { coreAdminUsername } from "@/server/auth";
 
@@ -581,6 +582,7 @@ export function toPlayer(profile: ProfileWithUser, records: RankedRecord[]) {
     rank: profile.rank,
     bio: profile.bio,
     avatar: profile.avatar,
+    favoriteHeroes: parseFavoriteHeroes(profile.favoriteHeroes),
     kookName: profile.user.kookName,
     background: profile.user.backgroundImage,
     wins: stats.wins,

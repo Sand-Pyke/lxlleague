@@ -92,7 +92,17 @@ export async function getViewer() {
       status: true,
       // 自定义背景现在是全站生效的，因此顶栏外壳也需要拿到它。
       backgroundImage: true,
-      profile: { select: { mainPosition: true, subPosition: true, avatar: true } },
+      // 报名赛事前需要校验资料是否完善，顶栏外壳一并带出来供赛事页使用。
+      kookName: true,
+      profile: {
+        select: {
+          mainPosition: true,
+          subPosition: true,
+          avatar: true,
+          gameName: true,
+          rank: true,
+        },
+      },
     },
   });
 }
@@ -180,7 +190,8 @@ export async function register(request: NextRequest) {
         username,
         passwordHash: await bcrypt.hash(password, 12),
         status: "PENDING",
-        profile: { create: { name: username, gameName: username, rank } },
+        // 游戏ID不再复用账号名：必须由选手按游戏内昵称自己填写（格式 名称#数字编号）。
+        profile: { create: { name: username, gameName: "", rank } },
       },
     });
     const response = NextResponse.json({

@@ -186,6 +186,14 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                     classNames={{ popup: { root: "rank-dropdown" } }}
                   />
                 </Form.Item>
+                {/* 段位要按真实水平填写：低段位选手开小号来打会被判炸鱼并处罚。 */}
+                <Alert
+                  className="auth-rank-notice"
+                  type="warning"
+                  showIcon
+                  title="请如实填写真实段位"
+                  description="段位将用于赛事分组与结算。若后续被发现有炸鱼（高段位选手用低段位账号参赛）行为，将受到处罚。"
+                />
                 <Form.Item
                   name="captchaAnswer"
                   label="验证码"

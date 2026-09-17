@@ -8,6 +8,7 @@ import {
   UserOutlined,
 } from "@ant-design/icons";
 import {
+  Alert,
   Avatar,
   Button,
   Card,
@@ -32,9 +33,19 @@ import { errorText, getJson, postJson, successText } from "@/components/admin/ap
 import { LeagueShell } from "@/components/app-shell";
 import { RankLabel } from "@/components/rank-label";
 import { useThemeMode } from "@/components/theme-provider";
-import { POSITION_OPTIONS, RANK_OPTIONS, positionText } from "@/lib/admin-options";
+import {
+  NO_SUB_POSITION,
+  POSITION_OPTIONS,
+  RANK_OPTIONS,
+  normalizeSubPosition,
+  positionText,
+  subPositionChoices,
+} from "@/lib/admin-options";
 import { BACKGROUND_OPTIONS } from "@/lib/backgrounds";
-import { championIcon, itemIcon } from "@/lib/game-assets";
+import { MAX_FAVORITE_HEROES } from "@/lib/favorite-heroes";
+import { GAME_NAME_HINT, isValidGameName } from "@/lib/game-name";
+import { championChoices, championIcon, itemIcon } from "@/lib/game-assets";
+import { missingSignupRequirements } from "@/lib/profile-requirements";
 
 type HeroStat = { champion: string; games: number; win_rate: number; kda: number };
 
@@ -71,6 +82,8 @@ type ProfileUser = {
   rank: string;
   bio: string;
   avatar: string;
+  /** 自己挑的常用英雄（最多 3 个，英雄名） */
+  favoriteHeroes: string[];
   kookName: string;
   background: string;
   is_admin: boolean;
@@ -107,12 +120,13 @@ type ProfilePayload = {
   match_history: HistoryRow[];
 };
 
-type EditKind = "bio" | "kook" | "game" | "account" | "pwd" | "pos" | "rank" | "bg";
+type EditKind = "bio" | "kook" | "game" | "hero" | "account" | "pwd" | "pos" | "rank" | "bg";
 
 const EDIT_TITLE: Record<EditKind, string> = {
   bio: "编辑个人简介",
   kook: "设置 KOOK 昵称",
   game: "设置游戏ID",
+  hero: "设置常用英雄",
   account: "修改账户ID",
   pwd: "修改密码",
   pos: "设置位置",
@@ -124,11 +138,12 @@ const emptyDraft = {
   bio: "",
   kookName: "",
   gameName: "",
+  heroes: [] as string[],
   accountName: "",
   oldPwd: "",
   newPwd: "",
   mainPos: "",
-  subPos: "无",
+  subPos: NO_SUB_POSITION,
   rank: "",
   bg: "",
 };
@@ -194,13 +209,16 @@ export function ProfileView() {
       bio: payload.user.bio ?? "",
       kookName: payload.user.kookName ?? "",
       gameName: payload.user.gameName ?? "",
+      heroes: [...(payload.user.favoriteHeroes ?? [])],
       accountName: payload.user.username ?? "",
       oldPwd: "",
       newPwd: "",
       mainPos: POSITION_OPTIONS.includes(payload.user.mainPosition)
         ? payload.user.mainPosition
         : "",
-      subPos: POSITION_OPTIONS.includes(payload.user.subPosition) ? payload.user.subPosition : "无",
+      subPos: POSITION_OPTIONS.includes(payload.user.subPosition)
+        ? payload.user.subPosition
+        : NO_SUB_POSITION,
       rank: payload.user.rank ?? "",
       bg: payload.user.background.replace("/assets/bgs/", ""),
     });
@@ -247,15 +265,23 @@ export function ProfileView() {
       messageApi.error("请选择段位");
       return;
     }
+    if (editKind === "game" && !isValidGameName(draft.gameName)) {
+      messageApi.error(`游戏ID格式不正确：${GAME_NAME_HINT}`);
+      return;
+    }
     setSaving(true);
     try {
       const request: Record<EditKind, [string, Record<string, unknown>]> = {
         bio: ["/api/user/update_bio", { bio: draft.bio }],
         kook: ["/api/user/update_kook", { kook_name: draft.kookName }],
         game: ["/api/user/game_name", { game_name: draft.gameName }],
+        hero: ["/api/user/favorite_heroes", { heroes: draft.heroes }],
         account: ["/api/user/change_username", { username: draft.accountName }],
         pwd: ["/api/user/change_pwd", { old_pwd: draft.oldPwd, new_pwd: draft.newPwd }],
-        pos: ["/api/user/update_pos", { main_pos: draft.mainPos, sub_pos: draft.subPos || "无" }],
+        pos: [
+          "/api/user/update_pos",
+          { main_pos: draft.mainPos, sub_pos: normalizeSubPosition(draft.mainPos, draft.subPos) },
+        ],
         // 段位不能直接改：提交后账号会重新进入待审核状态。
         rank: ["/api/user/rank", { rank: draft.rank }],
         bg: ["/api/user/bg", { bg: draft.bg }],
@@ -281,6 +307,21 @@ export function ProfileView() {
   // 核心管理员（admin）是系统账号而非选手：不展示段位/位置/排名与各项数据面板，
   // 仅保留档案卡与「个人简介」里的账户设置。
   const coreAdmin = Boolean(payload?.is_core_admin);
+  // 常用英雄分两份：自己挑的（用于「常用英雄」卡片与头像行）与战绩推导的（用于「英雄战绩」）。
+  const favoriteHeroes = user?.favoriteHeroes ?? [];
+  const statHeroes = payload?.heroes ?? [];
+  const heroStrip = favoriteHeroes.length
+    ? favoriteHeroes
+    : statHeroes.map((hero) => hero.champion);
+  // 报名赛事前需补全的资料项，缺哪几项直接列在「我的资料设置」里。
+  const missingForSignup = user
+    ? missingSignupRequirements({
+        gameName: user.gameName,
+        mainPosition: user.mainPosition,
+        rank: user.rank,
+        kookName: user.kookName,
+      })
+    : [];
 
   const columns: ColumnsType<HistoryRow> = [
     {
@@ -465,18 +506,11 @@ export function ProfileView() {
                   >
                     副位置 {positionText(user.subPosition)}
                   </Tag>
-                  {payload?.heroes.length ? (
-                    <span className="prof-heroes" title="常用英雄">
-                      {payload.heroes.map((hero) => {
-                        const icon = championIcon(hero.champion);
-                        return icon ? (
-                          <img
-                            key={hero.champion}
-                            src={icon}
-                            alt={hero.champion}
-                            title={hero.champion}
-                          />
-                        ) : null;
+                  {heroStrip.length ? (
+                    <span className="prof-heroes" title={favoriteHeroes.length ? "常用英雄" : "常用英雄（按战绩）"}>
+                      {heroStrip.map((name) => {
+                        const icon = championIcon(name);
+                        return icon ? <img key={name} src={icon} alt={name} title={name} /> : null;
                       })}
                     </span>
                   ) : null}
@@ -514,6 +548,13 @@ export function ProfileView() {
                         { label: "KOOK昵称", value: user.kookName || "未设置", kind: "kook" },
                         { label: "游戏ID", value: user.gameName || "未设置", kind: "game" },
                         {
+                          label: "常用英雄",
+                          value: favoriteHeroes.length
+                            ? favoriteHeroes.join(" / ")
+                            : "未设置",
+                          kind: "hero" as EditKind,
+                        },
+                        {
                           label: "段位",
                           value: (
                             <>
@@ -540,8 +581,17 @@ export function ProfileView() {
                       </div>
                     ))}
                     <p className="prof-settings-note">
-                      游戏ID（召唤师名）用于战绩导入时匹配到你的账号，需与游戏内名称一致。
+                      游戏ID（召唤师名）用于战绩导入时匹配到你的账号，需与游戏内名称一致，
+                      格式为 名称#数字编号（例如 众生皆我#32250）。
                     </p>
+                    {missingForSignup.length ? (
+                      <Alert
+                        className="prof-signup-warning"
+                        type="warning"
+                        showIcon
+                        title={`报名赛事前需先补全：${missingForSignup.join("、")}`}
+                      />
+                    ) : null}
                   </div>
                 ) : null}
               </Card>
@@ -573,9 +623,41 @@ export function ProfileView() {
             </div>
 
             <div className="prof-side">
-              <Card className="antd-panel" title="常用英雄">
-                {payload?.heroes.length ? (
-                  payload.heroes.map((hero) => {
+              <Card
+                className="antd-panel"
+                title="常用英雄"
+                extra={
+                  self ? (
+                    <Button size="small" type="link" onClick={() => openEdit("hero")}>
+                      设置
+                    </Button>
+                  ) : null
+                }
+              >
+                {favoriteHeroes.length ? (
+                  favoriteHeroes.map((name) => {
+                    const icon = championIcon(name);
+                    return (
+                      <div className="prof-hero-row" key={name}>
+                        {icon ? <img src={icon} alt={name} /> : <b>{name.slice(0, 1)}</b>}
+                        <div>
+                          <strong>{name}</strong>
+                          <small>自选常用英雄</small>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description={self ? "还未设置常用英雄" : "暂无常用英雄"}
+                  />
+                )}
+              </Card>
+
+              <Card className="antd-panel" title="英雄战绩">
+                {statHeroes.length ? (
+                  statHeroes.map((hero) => {
                     const icon = championIcon(hero.champion);
                     return (
                       <div className="prof-hero-row" key={hero.champion}>
@@ -682,12 +764,48 @@ export function ProfileView() {
           />
         ) : null}
         {editKind === "game" ? (
-          <Input
-            value={draft.gameName}
-            maxLength={80}
-            placeholder="游戏内召唤师名"
-            onChange={(event) => setDraft({ ...draft, gameName: event.target.value })}
-          />
+          <Space orientation="vertical" size={6} style={{ width: "100%" }}>
+            <Input
+              value={draft.gameName}
+              maxLength={32}
+              placeholder="例如 众生皆我#32250"
+              onChange={(event) => setDraft({ ...draft, gameName: event.target.value })}
+            />
+            <Typography.Text type="secondary">
+              {GAME_NAME_HINT}，需与游戏内名称完全一致（战绩导入按它匹配你的账号）。
+            </Typography.Text>
+          </Space>
+        ) : null}
+        {editKind === "hero" ? (
+          <Space orientation="vertical" size={8} style={{ width: "100%" }}>
+            <Select
+              mode="multiple"
+              style={{ width: "100%" }}
+              value={draft.heroes}
+              maxCount={MAX_FAVORITE_HEROES}
+              placeholder={`最多选择 ${MAX_FAVORITE_HEROES} 个常用英雄`}
+              options={championChoices.map((choice) => ({
+                value: choice.value,
+                label: (
+                  <span className="prof-hero-option">
+                    {choice.icon ? <img src={choice.icon} alt="" /> : null}
+                    {choice.label}
+                  </span>
+                ),
+              }))}
+              // 选择器只按 label 搜索，这里把英雄名/英文别名一并塞进 label 的文本里，
+              // 保证搜「安妮」或「Annie」都能命中同一条。
+              filterOption={(input, option) => {
+                const choice = championChoices.find((item) => item.value === option?.value);
+                const haystack = `${choice?.keywords ?? ""}${option?.value ?? ""}`.toLowerCase();
+                return haystack.includes(input.trim().toLowerCase());
+              }}
+              onChange={(value: string[]) => setDraft({ ...draft, heroes: value })}
+            />
+            <Typography.Text type="secondary">
+              最多 {MAX_FAVORITE_HEROES} 个，展示在个人主页；留空则不展示自选英雄。
+            </Typography.Text>
+          </Space>
         ) : null}
         {editKind === "account" ? (
           <Space orientation="vertical" size={6} style={{ width: "100%" }}>
@@ -748,7 +866,14 @@ export function ProfileView() {
                   value: position,
                   label: positionText(position),
                 }))}
-                onChange={(value) => setDraft({ ...draft, mainPos: value })}
+                // 副位置不能与主位置相同：改主位置时顺手把撞上的副位置清成「无」。
+                onChange={(value) =>
+                  setDraft((current) => ({
+                    ...current,
+                    mainPos: value,
+                    subPos: normalizeSubPosition(value, current.subPos),
+                  }))
+                }
               />
             </div>
             <div>
@@ -758,8 +883,8 @@ export function ProfileView() {
               <Select
                 style={{ width: "100%" }}
                 value={draft.subPos}
-                options={[{ value: "无", label: "无" }].concat(
-                  POSITION_OPTIONS.map((position) => ({
+                options={[{ value: NO_SUB_POSITION, label: "无" }].concat(
+                  subPositionChoices(draft.mainPos).map((position) => ({
                     value: position,
                     label: positionText(position),
                   })),
@@ -768,7 +893,7 @@ export function ProfileView() {
               />
             </div>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              主位置为必选，报名赛事时会自动带入。
+              主位置为必选，报名赛事时会自动带入；副位置不能与主位置相同。
             </Typography.Text>
           </Space>
         ) : null}

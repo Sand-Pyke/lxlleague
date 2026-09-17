@@ -22,7 +22,8 @@ try {
       passwordHash: await bcrypt.hash(password, 12),
       isAdmin: true,
       status: "APPROVED",
-      profile: { create: { name: username, gameName: username } },
+      // 游戏ID 必须由选手按游戏内昵称填写（名称#数字），系统账号不预置虚假的游戏ID。
+      profile: { create: { name: username, gameName: "" } },
     },
   });
   console.log(`Administrator ${username} is ready.`);

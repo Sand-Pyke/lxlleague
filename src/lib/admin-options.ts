@@ -121,3 +121,27 @@ export const isUnsetPosition = (position: string | null | undefined) =>
 
 export const positionText = (position: string) =>
   isUnsetPosition(position) ? "未填写" : (POSITION_LABEL[position] ?? position);
+
+/** 副位置留空的哨兵值：库里与旧数据保持一致存「无」。 */
+export const NO_SUB_POSITION = "无";
+
+/** 主位置是否已经选了真实位置（未设置 / 未填 / 「无」都算没选）。 */
+export const hasRealPosition = (position: string | null | undefined) =>
+  !isUnsetPosition(position) && position !== NO_SUB_POSITION;
+
+/**
+ * 副位置不能与主位置相同：主位置选了真实位置时，副位置撞上就落成「无」，
+ * 防止个人资料与报名表里出现「上单 + 上单」这种自相矛盾的数据。
+ */
+export function normalizeSubPosition(mainPosition: string, subPosition: string) {
+  return hasRealPosition(mainPosition) && subPosition === mainPosition
+    ? NO_SUB_POSITION
+    : subPosition;
+}
+
+/** 副位置可选项：主位置选了真实位置时，把它从副位置列表里过滤掉。 */
+export function subPositionChoices(mainPosition: string) {
+  return hasRealPosition(mainPosition)
+    ? POSITION_OPTIONS.filter((position) => position !== mainPosition)
+    : POSITION_OPTIONS;
+}
