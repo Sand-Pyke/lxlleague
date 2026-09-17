@@ -5,7 +5,7 @@ The application is deployed as two Docker Compose services: the Next.js API/appl
 ## First deployment
 
 1. Install Docker Engine with the Docker Compose plugin on the target host.
-2. Copy `.env.example` to `.env` on the host and replace every placeholder with a long, unique secret: `POSTGRES_PASSWORD`, `ADMIN_PASSWORD`, `CAPTCHA_SECRET` and `SESSION_SECRET`. `ADMIN_PASSWORD` must be at least 12 characters. `SESSION_SECRET` is optional but recommended: when it is left empty, the login session signing key falls back to `CAPTCHA_SECRET` and then to `ADMIN_PASSWORD`.
+2. Copy `.env.example` to `.env` on the host and replace every placeholder with a long, unique secret: `POSTGRES_PASSWORD`, `ADMIN_PASSWORD`, `CAPTCHA_SECRET` and `SESSION_SECRET`. `ADMIN_PASSWORD` must be at least 12 characters. `SESSION_SECRET` should always be set to its own 32+ character random value: when it is empty the session signing key is derived from `CAPTCHA_SECRET` (and then `ADMIN_PASSWORD`), and the application logs a warning because captcha MACs are handed to anonymous visitors. Leaving it empty is backward compatible — the container still starts — but a dedicated secret is recommended.
 3. Validate the production configuration with `docker compose -p lol-champion -f docker-compose.prod.yml --env-file .env config --quiet`.
 4. Start it with `docker compose -p lol-champion -f docker-compose.prod.yml --env-file .env up -d --build`.
 5. Confirm startup with `docker compose -p lol-champion -f docker-compose.prod.yml --env-file .env ps`. The application automatically applies the tracked Prisma migrations and creates or updates the configured administrator account.
@@ -16,11 +16,12 @@ Session cookies (`lxl_user_id`, `lxl_captcha`) are marked `Secure` only when the
 
 ## Login and request hardening
 
-- `lxl_user_id` is no longer a raw user id: it is `<userId>.<expiresAt>.<HMAC-SHA256>` signed with the auth secret and expires after 7 days. A forged or hand-edited cookie is treated as "not logged in". **Changing `SESSION_SECRET`/`CAPTCHA_SECRET`/`ADMIN_PASSWORD` invalidates every existing session, so everyone (including the administrator) has to log in again** — this happens once when upgrading to the release that introduced signed cookies.
+- `lxl_user_id` is no longer a raw user id: it is `<userId>.<expiresAt>.<HMAC-SHA256>` signed with the auth secret and expires after 7 days. A forged or hand-edited cookie is treated as "not logged in". The session and captcha MACs use separate sub-keys derived from that secret (`HMAC(secret, "lol-champion:session"|"lol-champion:captcha")`), so a captcha token — whose MAC is returned to any anonymous caller by `GET /api/captcha` — cannot be reused as a session signature. **Changing `SESSION_SECRET`/`CAPTCHA_SECRET`/`ADMIN_PASSWORD` invalidates every existing session, so everyone (including the administrator) has to log in again** — this happens once when upgrading to the release that introduced signed cookies.
 - Only `APPROVED` accounts can hold a session: removing a user's approval takes effect on their next request even if they still have a cookie.
 - Account ids (login names) are ASCII-only: letters, digits and underscore, 2-24 characters. Registration, "change account id" and login all share the rule in `src/lib/credentials.ts`; Chinese characters, full-width characters and spaces are rejected. Passwords are 6-64 printable ASCII characters (no Chinese, no spaces).
 - Repeated failed logins for the same account + client IP are throttled (8 failures per 10 minutes, then a 10 minute block; HTTP 429).
 - `src/middleware.ts` rejects cross-site `POST`/`PUT`/`PATCH`/`DELETE` requests (HTTP 403) by validating `Sec-Fetch-Site`, then `Origin`/`Referer` against the request host, and adds `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` and (over HTTPS) `Strict-Transport-Security` to every response. The reverse proxy must forward the original `Host` header (Nginx default) and, behind another proxy, `X-Forwarded-Host`, otherwise the origin check would reject legitimate form submissions. Plain `curl`/script clients that send no `Origin`, `Referer` or `Sec-Fetch-Site` header are unaffected.
+- `POST /api/logout` is the only logout method. `GET /api/logout` is no longer routed, because a cross-site top-level GET navigation would carry the `SameSite=Lax` session cookie and would let any third-party page silently log a user out.
 
 ## Uploaded files
 

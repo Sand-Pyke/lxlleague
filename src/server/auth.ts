@@ -13,7 +13,7 @@ const captchaLifetimeSeconds = 5 * 60;
 const sessionLifetimeSeconds = 60 * 60 * 24 * 7;
 
 /**
- * 验证码与登录态共用的签名密钥。
+ * 签名密钥的根材料。
  *
  * 用环境变量提供：密钥一旦用固定字符串兜底，任何知道这套算法的人都能自己算出合法的
  * 登录 Cookie（伪造 lxl_user_id 直接变成管理员）。因此生产环境缺少配置时直接抛错，
@@ -22,7 +22,16 @@ const sessionLifetimeSeconds = 60 * 60 * 24 * 7;
 function resolveAuthSecret() {
   const secret =
     process.env.SESSION_SECRET || process.env.CAPTCHA_SECRET || process.env.ADMIN_PASSWORD;
-  if (secret) return secret;
+  if (secret) {
+    if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
+      // 生产环境没单独配置 SESSION_SECRET 时会退回验证码密钥，而验证码密钥的 HMAC 会随
+      // /api/captcha 交给任何匿名访客，等于给登录态签名密钥留了一个已知明文的比对样本。
+      console.warn(
+        "[auth] 未配置 SESSION_SECRET，登录态签名密钥回退到 CAPTCHA_SECRET；请在 .env 中设置独立的 SESSION_SECRET",
+      );
+    }
+    return secret;
+  }
   if (process.env.NODE_ENV === "production") {
     throw new Error("缺少 SESSION_SECRET / CAPTCHA_SECRET / ADMIN_PASSWORD，无法签发登录态");
   }
@@ -31,13 +40,21 @@ function resolveAuthSecret() {
 
 const authSecret = resolveAuthSecret();
 
-function signature(payload: string) {
-  return createHmac("sha256", authSecret).update(payload).digest("base64url");
+/** 用 HKDF 风格的派生把同一份根密钥拆成互不通用的子密钥，避免一个用途的 MAC 泄露另一个用途的密钥。 */
+function deriveKey(purpose: string) {
+  return createHmac("sha256", authSecret).update(`lol-champion:${purpose}`).digest();
 }
 
-function signatureMatches(payload: string, received: string | undefined) {
+const sessionKey = deriveKey("session");
+const captchaKey = deriveKey("captcha");
+
+function signature(payload: string, key: Buffer) {
+  return createHmac("sha256", key).update(payload).digest("base64url");
+}
+
+function signatureMatches(payload: string, received: string | undefined, key: Buffer) {
   if (!received) return false;
-  const expected = Buffer.from(signature(payload));
+  const expected = Buffer.from(signature(payload, key));
   const actual = Buffer.from(received);
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
@@ -51,7 +68,7 @@ function signatureMatches(payload: string, received: string | undefined) {
  */
 function createSessionToken(userId: number) {
   const payload = `${userId}.${Date.now() + sessionLifetimeSeconds * 1000}`;
-  return `${payload}.${signature(payload)}`;
+  return `${payload}.${signature(payload, sessionKey)}`;
 }
 
 function userIdFromToken(token: string | undefined) {
@@ -62,7 +79,7 @@ function userIdFromToken(token: string | undefined) {
   const expires = Number(rawExpires);
   if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(expires)) return null;
   if (expires < Date.now()) return null;
-  if (!signatureMatches(`${rawId}.${rawExpires}`, received)) return null;
+  if (!signatureMatches(`${rawId}.${rawExpires}`, received, sessionKey)) return null;
   return id;
 }
 
@@ -97,7 +114,10 @@ function isValidCaptcha(request: NextRequest, value: unknown) {
     return false;
   }
 
-  return signatureMatches(`${answer}.${expiresAt}.${nonce}`, received) && value.trim() === answer;
+  return (
+    signatureMatches(`${answer}.${expiresAt}.${nonce}`, received, captchaKey) &&
+    value.trim() === answer
+  );
 }
 
 /** Creates a short-lived, signed arithmetic challenge for registration. */
@@ -107,7 +127,7 @@ export function createCaptcha(request: NextRequest) {
   const expiresAt = Date.now() + captchaLifetimeSeconds * 1000;
   const payload = `${left + right}.${expiresAt}.${randomBytes(12).toString("base64url")}`;
   const response = NextResponse.json({ question: `${left} + ${right} = ?` });
-  response.cookies.set(captchaCookieName, `${payload}.${signature(payload)}`, {
+  response.cookies.set(captchaCookieName, `${payload}.${signature(payload, captchaKey)}`, {
     httpOnly: true,
     sameSite: "strict",
     secure: isSecureRequest(request),
