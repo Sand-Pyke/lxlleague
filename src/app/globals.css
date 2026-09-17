@@ -1233,6 +1233,61 @@ a {
   color: #fcd34d;
   font-style: normal;
 }
+/* 报名名单的分路统计（上单/打野/中单/AD/辅助）。必须用 `.roster > .roster-groups`
+   盖过 `.roster > div` 的行样式，否则统计条会被当成一条选手行来排。 */
+.roster > .roster-groups {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  margin: 4px 0 12px;
+  border-bottom: 0;
+}
+.roster-group {
+  flex: none;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted);
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 999px;
+  padding: 2px 6px;
+}
+/* 报名选手行改成可点击的链接，点击进入该选手的个人主页。 */
+.roster-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  transition: background 0.15s ease;
+}
+.roster-row:hover {
+  background: rgba(148, 163, 184, 0.06);
+}
+.roster-row > span {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+}
+.roster-more {
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  background: rgba(148, 163, 184, 0.06);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.roster-more:hover {
+  color: #fff;
+  border-color: rgba(139, 92, 246, 0.6);
+}
 .centered {
   text-align: center;
 }

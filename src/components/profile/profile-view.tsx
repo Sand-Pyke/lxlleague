@@ -524,7 +524,8 @@ export function ProfileView() {
                 ) : null}
               </div>
               <div className="prof-identity">
-                <h1>{user.name}</h1>
+                {/* 看别人的主页时默认展示游戏ID（召唤师名），没设置则退回账户ID。 */}
+                <h1>{self ? user.name : user.gameName || user.username}</h1>
                 <div className="prof-meta">
                   <span className="prof-rank">
                     <RankLabel rank={user.rank} fallback="未定段" />

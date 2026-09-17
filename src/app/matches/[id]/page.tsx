@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LeagueShell, Status } from "@/components/app-shell";
+import { MatchRoster } from "@/components/match-roster";
 import { MatchSignup } from "@/components/match-signup";
-import { RankLabel } from "@/components/rank-label";
 import { formatMatchDate } from "@/lib/format-date";
 import { getMatchPageData } from "@/server/matches";
 
@@ -87,23 +87,7 @@ export default async function MatchDetail({ params }: { params: Promise<{ id: st
             )}
           </div>
         </section>
-        <aside className="panel roster">
-          <p>REGISTERED PLAYERS</p>
-          <h2>已报名选手 · {players.length}</h2>
-          {players.length === 0 && <span>暂无选手报名</span>}
-          {players.map((player) => (
-            <div key={player.id}>
-              <img src={player.avatar || undefined} alt="" />
-              <span>
-                <b>{player.name}</b>
-                <small>{player.teamPosition || player.position}</small>
-              </span>
-              <em>
-                <RankLabel rank={player.rank} fallback="未定段" />
-              </em>
-            </div>
-          ))}
-        </aside>
+        <MatchRoster players={players} />
       </div>
       <section className="panel schedule">
         <div className="section-heading compact">
