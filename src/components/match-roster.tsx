@@ -7,6 +7,8 @@ import { RankLabel } from "@/components/rank-label";
 type RosterPlayer = {
   id: number;
   name: string;
+  /** 游戏名称（名称#编号），如 向阳而生#32250 */
+  gameName: string;
   /** 主位置（profile.mainPosition，可为 FILL / 空） */
   position: string;
   /** 报名/组队后的位置槽（TOP/JUG/MID/ADC/SUP） */
@@ -68,7 +70,7 @@ export function MatchRoster({ players }: { players: RosterPlayer[] }) {
         <Link key={player.id} href={`/profile?uid=${player.id}`} className="roster-row">
           <img src={player.avatar || undefined} alt="" />
           <span>
-            <b>{player.name}</b>
+            <b>{player.gameName || player.name}</b>
             <small>{positionText(player.teamPosition || player.position)}</small>
           </span>
           <em>
