@@ -16,9 +16,10 @@ export default function MatchesPage() {
   const [tab, setTab] = useState<MatchTab>("today");
   const [loading, setLoading] = useState(true);
 
-  // 核心管理员（admin）是运维账号、不参与比赛，「我的比赛」对其没有意义；
-  // 普通选手仍保留该页签。
-  const showMineTab = !viewer?.isCoreAdmin;
+  // 未登录时没有「我的比赛」；核心管理员（admin）是运维账号、不参与比赛，也不展示该页签。
+  const showMineTab = Boolean(viewer && !viewer.isCoreAdmin);
+  // 退出登录后残留的「我的比赛」选中态要退回默认页签，否则会出现所有页签都不高亮的空状态。
+  const activeTab: MatchTab = tab === "mine" && !showMineTab ? "today" : tab;
 
   useEffect(() => {
     fetch("/api/match/list")
@@ -30,11 +31,11 @@ export default function MatchesPage() {
   const filtered = useMemo(
     () =>
       matches.filter((match) => {
-        if (tab === "history") return match.status === "FINISHED";
-        if (tab === "mine") return Boolean(match.signed);
+        if (activeTab === "history") return match.status === "FINISHED";
+        if (activeTab === "mine") return Boolean(match.signed);
         return match.status !== "FINISHED";
       }),
-    [matches, tab],
+    [matches, activeTab],
   );
 
   return (
@@ -42,7 +43,7 @@ export default function MatchesPage() {
       <Card className="antd-panel" variant="borderless">
         <Segmented
           block
-          value={tab}
+          value={activeTab}
           onChange={(value) => setTab(value as MatchTab)}
           options={[
             { label: "当前赛事", value: "today", icon: <CalendarOutlined /> },
