@@ -8,9 +8,17 @@ The application is deployed as two Docker Compose services: the Next.js API/appl
 2. Copy `.env.example` to `.env` on the host and replace every placeholder with a long, unique secret: `POSTGRES_PASSWORD`, `ADMIN_PASSWORD`, `CAPTCHA_SECRET` and `SESSION_SECRET`. `ADMIN_PASSWORD` must be at least 12 characters. `SESSION_SECRET` should always be set to its own 32+ character random value: when it is empty the session signing key is derived from `CAPTCHA_SECRET` (and then `ADMIN_PASSWORD`), and the application logs a warning because captcha MACs are handed to anonymous visitors. Leaving it empty is backward compatible — the container still starts — but a dedicated secret is recommended.
 3. Validate the production configuration with `docker compose -p lol-champion -f docker-compose.prod.yml --env-file .env config --quiet`.
 4. Start it with `docker compose -p lol-champion -f docker-compose.prod.yml --env-file .env up -d --build`.
-5. Confirm startup with `docker compose -p lol-champion -f docker-compose.prod.yml --env-file .env ps`. The application automatically applies the tracked Prisma migrations and creates or updates the configured administrator account.
+5. Confirm startup with `docker compose -p lol-champion -f docker-compose.prod.yml --env-file .env ps`. A one-shot `migrate` service applies the tracked Prisma migrations and creates or updates the configured administrator account before `app` starts.
 
 The app listens on `APP_PORT` (default `3000`). Put a TLS reverse proxy such as Nginx or Caddy in front of it before exposing it publicly.
+
+### Building on the server is slow or hangs
+
+`up -d --build` compiles the Next.js app on the host with `next build`, which is CPU- and memory-intensive. On a small VPS (especially with PostgreSQL running on the same box) this can exhaust RAM: the kernel starts swapping or the OOM killer takes over, which looks like the SSH session or the whole machine freezing. This is a host-resource problem, not an application bug.
+
+- **Preferred:** build the image in CI (or on a more powerful machine), push it to a registry, then on the server run `docker compose ... pull && docker compose ... up -d` without `--build`.
+- Give the server at least 2 GB of free RAM (or add swap) if you must build in place.
+- The production image now uses Next.js `output: "standalone"`, so the runtime image no longer carries `typescript`, the Prisma CLI or any other devDependencies — it is much smaller and starts faster.
 
 Session cookies (`lxl_user_id`, `lxl_captcha`) are marked `Secure` only when the incoming request is HTTPS. The app trusts the `x-forwarded-proto` header first and falls back to the request protocol, so a reverse proxy must forward that header (Nginx: `proxy_set_header X-Forwarded-Proto $scheme;`). Because of this, accessing the app directly over plain HTTP also works, but TLS is still strongly recommended.
 
@@ -25,7 +33,7 @@ Session cookies (`lxl_user_id`, `lxl_captcha`) are marked `Secure` only when the
 
 ## Uploaded files
 
-Avatars and custom backgrounds are written to `UPLOAD_DIR`, which is bind-mounted into the container at `/app/data/uploads` (`UPLOAD_DIR` in `.env` sets the host directory, default `./data/uploads` relative to the deployment directory). Do not point it inside `public/`: `next start` only scans the public folder once at startup, so files created while the server is running would not be served in production and an avatar would stay missing until the next restart.
+Avatars and custom backgrounds are written to `UPLOAD_DIR`, which is bind-mounted into the container at `/app/data/uploads` (`UPLOAD_DIR` in `.env` sets the host directory, default `./data/uploads` relative to the deployment directory). Do not point it inside `public/`: the standalone server (`node server.js`) only scans the public folder once at startup, so files created while the server is running would not be served in production and an avatar would stay missing until the next restart.
 
 The app serves these files itself through `/assets/avatars/*` and `/assets/user-bg/*`, so an upload shows up immediately. Uploads live outside the image, so they survive `compose up -d --build`, but they are not part of the pipeline's SQL backup: back up that host directory together with the database dumps.
 
