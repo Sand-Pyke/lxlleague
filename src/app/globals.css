@@ -1900,6 +1900,96 @@ body {
   color: #172033;
 }
 
+/* ---------- 浅色主题下赛事中心的可读性 ---------- */
+
+/* 下面这些字面值是照深色底写死的：.button 是白字，.big-score strong（比分）与 .details dd
+   （赛事信息取值）也是白色，而浅色主题里 .panel / .match-hero 是白底（rgba(255,255,255,0.86)），
+   白字压白底只有 1.01:1，等于看不见；#c4b5fd / #a78bfa 用在白底上也只有 1.83:1 与 2.69:1。
+   因此这里把「浅色底上的文字」逐类压深。带渐变色填充的 .button.primary / .card-cta 与选中态
+   .game-tabs a.selected 保留白字，仍由它们自己的基础规则负责，这里不碰。 */
+
+/* 「查看对阵 / 赛果数据 / 取消报名 / 查看当前轮」这类透明底按钮。 */
+:root[data-theme="light"] .button.ghost {
+  color: #172033;
+}
+
+/* 比分与赛事信息取值。 */
+:root[data-theme="light"] .big-score strong,
+:root[data-theme="light"] .details dd {
+  color: #172033;
+}
+
+/* 「← 返回赛事中心」：锚点用的是 antd 的链接色 #6d5dfc，白底 4.26:1，压深一档更清楚。 */
+:root[data-theme="light"] .back,
+:root[data-theme="light"] .back a {
+  color: #4f46e5;
+}
+
+/* 「查看对阵 →」这类文字链接与赛事副标题（常规赛 · BO3）。 */
+:root[data-theme="light"] .section-heading > a,
+:root[data-theme="light"] .text-link,
+:root[data-theme="light"] .match-hero p {
+  color: #6d28d9;
+}
+
+/* 小标题（EVENT INFO / REGISTERED PLAYERS / SCHEDULE / FINAL RESULT）与 .result-note。 */
+:root[data-theme="light"] .eyebrow,
+:root[data-theme="light"] .panel > p,
+:root[data-theme="light"] .result-hero > p,
+:root[data-theme="light"] .section-heading p,
+:root[data-theme="light"] .result-note {
+  color: #6d28d9;
+}
+
+/* 阵容里的「正式 / 替补」小标记：基础色 #fcd34d 在白底上 1.4:1。 */
+:root[data-theme="light"] .roster em {
+  color: #a16207;
+}
+
+/* 次要文字灰 --muted 默认是照深色底写的 #94a3b8，压在白底上只有 2.54:1；浅色主题的
+   --league-muted(#6d7890) 也还是不够（.details dt / .card-top / .match-meta 上的
+   time、.bo、状态标签实测 4.34:1）。这里改成与个人中心浅色主题同一档的 #4a5670
+   （白底 7.35:1、浅紫底 6.26:1）。只覆盖赛事中心用到的卡片容器，深色主题完全不受影响。 */
+:root[data-theme="light"] .match-hero,
+:root[data-theme="light"] .result-hero,
+:root[data-theme="light"] .match-card,
+:root[data-theme="light"] .panel {
+  --muted: #4a5670;
+}
+
+/* 例外：.lineup section 在浅色主题下仍是深色底（基础规则里的 rgba(15, 23, 42, 0.73)），
+   里面的次要文字必须继续用深色主题的灰，否则会变成「深灰压深底」。 */
+:root[data-theme="light"] .lineup section {
+  --muted: #94a3b8;
+}
+
+/* 阵容页头部右上角的「第 1 轮 · 对阵阵容」直接引用 --league-muted，不走 --muted，
+   需要单独压深：浅紫底 #eaecfa 上 3.78:1 → 6.26:1。 */
+:root[data-theme="light"] .lineup-round {
+  color: #4a5670;
+}
+
+/* 轮次/局数切换（GAME 1、第 1 轮）：基础样式是「深灰底 + 浅灰字」的深色小块，浅色主题下
+   文字只有 2.75:1；改成浅底深字，选中态保持原来的紫色高亮。 */
+:root[data-theme="light"] .tabs button:not(.selected),
+:root[data-theme="light"] .game-tabs button:not(.selected),
+:root[data-theme="light"] .game-tabs a:not(.selected) {
+  border-color: var(--league-border);
+  /* 比卡片底色略深一档，白卡片上才看得出是个可点的按钮。 */
+  background: rgba(148, 163, 184, 0.18);
+  color: #33415a;
+}
+
+/* 状态标签「即将开始 / 进行中」用的是 antd 预设色的浅色主题字色（#faad14 / #52c41a），
+   落在 #fffbe6 / #f6ffed 填充上只有 1.83:1，压深到与 .prof-gold / .prof-green 同一档。 */
+:root[data-theme="light"] .ant-tag.ant-tag-warning {
+  color: #a16207 !important;
+}
+
+:root[data-theme="light"] .ant-tag.ant-tag-success {
+  color: #15803d !important;
+}
+
 @media (max-width: 760px) {
   .league-header.ant-layout-header {
     height: auto;

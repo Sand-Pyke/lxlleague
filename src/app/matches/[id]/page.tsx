@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { LeagueShell, Status } from "@/components/app-shell";
 import { MatchSignup } from "@/components/match-signup";
 import { RankLabel } from "@/components/rank-label";
+import { formatMatchDate } from "@/lib/format-date";
 import { getMatchPageData } from "@/server/matches";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ export default async function MatchDetail({ params }: { params: Promise<{ id: st
             {match.round} · {match.bo}
           </p>
           <h1>{match.name}</h1>
-          <span>{match.date}</span>
+          <span>{formatMatchDate(match.date)}</span>
         </div>
         <div className="big-score">
           <b>{match.teams[0]}</b>

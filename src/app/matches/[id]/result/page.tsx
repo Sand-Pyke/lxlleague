@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { LeagueShell } from "@/components/app-shell";
 import { RankLabel } from "@/components/rank-label";
 import { championIcon, itemAsset, itemIcon } from "@/lib/game-assets";
+import { formatMatchDate } from "@/lib/format-date";
 import { getMatchResultData } from "@/server/matches";
 
 export const dynamic = "force-dynamic";
@@ -73,7 +74,7 @@ export default async function Result({
           <b>{match.teams[1]}</b>
         </div>
         <span>
-          {match.date} · {match.status === "FINISHED" ? "比赛已结束" : "比赛进行中"}
+          {formatMatchDate(match.date)} · {match.status === "FINISHED" ? "比赛已结束" : "比赛进行中"}
         </span>
       </section>
       <section className="panel game-tabs">
