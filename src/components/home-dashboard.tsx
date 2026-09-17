@@ -67,13 +67,17 @@ function RankRows({
 }
 
 export function HomeDashboard({ matches, players }: Props) {
-  // 排行与 MVP 都只看打完过比赛的选手：没有任何赛果时榜单为空，
-  // 等比赛结束、后台录入战绩后再自动生成（与 /rankings 完整榜单口径一致）。
-  const ranked = players.filter((player) => player.games > 0);
+  // 榜单只列「有成绩」的选手，避免出现一整行 0 胜率 / 0 次 MVP 的空数据：
+  // - 选手排行：积分 > 0（积分公式里全败也是 0 分，与 /rankings 完整榜单口径一致）；
+  // - MVP 榜：真的拿过 MVP（mvp > 0），否则整榜都是「0 次 MVP」，没有意义。
+  const ranked = players.filter((player) => player.points > 0);
   const leaders = ranked.slice(0, 5);
   // MVP 榜单：按 MVP 次数排，同次数看积分。固定取 5 人：
   // 每条 .rank-line 高约 64px，行数少了右边卡片会明显矮于左边的赛事卡，两列看着不齐。
-  const mvpLeaders = [...ranked].sort((a, b) => b.mvp - a.mvp || b.points - a.points).slice(0, 5);
+  const mvpLeaders = players
+    .filter((player) => player.mvp > 0)
+    .sort((a, b) => b.mvp - a.mvp || b.points - a.points)
+    .slice(0, 5);
   const recentMatch = matches.find((match) => match.status === "FINISHED");
   // 「今日赛事」只放一场：优先进行中的，否则取列表第一场，其余走「查看全部」。
   const featuredMatch = matches.find((match) => match.status === "LIVE") ?? matches[0];
