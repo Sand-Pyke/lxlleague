@@ -70,6 +70,7 @@ export default async function MatchDetail({ params }: { params: Promise<{ id: st
               matchId={match.id}
               signable={match.status === "CREATED"}
               loggedIn={Boolean(viewer)}
+              isCoreAdmin={viewer?.isCoreAdmin ?? false}
               signed={Boolean(signed)}
               defaultMain={viewer?.mainPosition ?? ""}
               defaultSub={viewer?.subPosition ?? ""}

@@ -23,13 +23,23 @@ type Props = {
   signable: boolean;
   loggedIn: boolean;
   signed: boolean;
+  /** 是否为 admin 核心管理员（运维账号，不参与比赛） */
+  isCoreAdmin: boolean;
   /** 个人主页默认位置，可能为 FILL（未设置） */
   defaultMain: string;
   defaultSub: string;
 };
 
 /** 报名 / 取消报名按钮与选位置弹窗（沿用旧报名弹窗的 main_pos、sub_pos、can_substitute）。 */
-export function MatchSignup({ matchId, signable, loggedIn, signed, defaultMain, defaultSub }: Props) {
+export function MatchSignup({
+  matchId,
+  signable,
+  loggedIn,
+  signed,
+  isCoreAdmin,
+  defaultMain,
+  defaultSub,
+}: Props) {
   const router = useRouter();
   const [messageApi, contextHolder] = message.useMessage();
   const [open, setOpen] = useState(false);
@@ -41,6 +51,8 @@ export function MatchSignup({ matchId, signable, loggedIn, signed, defaultMain, 
   if (!signable) {
     return <button className="button primary">关注赛事</button>;
   }
+  // 核心管理员（admin）是运维账号、不参与比赛，赛事信息里不给报名入口。
+  if (isCoreAdmin) return null;
   if (!loggedIn) {
     return (
       <Link className="button primary" href="/login">

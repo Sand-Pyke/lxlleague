@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser, getViewer } from "@/server/auth";
+import { getSessionUser, getViewer, isCoreAdminUsername } from "@/server/auth";
 import {
   cancelSignupForMatch,
   getMatchById,
@@ -411,6 +411,7 @@ export async function getMatchPageData(id: number) {
       ? {
           id: viewer.id,
           username: viewer.username,
+          isCoreAdmin: isCoreAdminUsername(viewer.username),
           mainPosition: viewer.profile?.mainPosition ?? "",
           subPosition: viewer.profile?.subPosition ?? "",
         }
