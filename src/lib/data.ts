@@ -34,6 +34,11 @@ export type Player = {
   avgAssists: number;
   /** 最常用英雄 */
   hero: string;
+  /**
+   * 选手在「我的资料」里自选的常用英雄（最多 3 个，顺序即填写顺序）。
+   * 选手中心与个人主页优先展示这一份；为空时回退到战绩统计出的 hero。
+   */
+  favoriteHeroes: string[];
   /** 最近 10 场胜负序列，如 "W L W W" */
   recent: string;
 };

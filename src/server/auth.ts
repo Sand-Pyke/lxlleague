@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { normalizeRank } from "@/lib/admin-options";
 import { passwordFormatError, usernameCharsetError, usernameFormatError } from "@/lib/credentials";
 import { randomDefaultAvatar } from "@/lib/default-avatars";
+import { missingSignupRequirements } from "@/lib/profile-requirements";
 import { prisma } from "@/lib/prisma";
 
 const cookieName = "lxl_user_id";
@@ -131,7 +132,9 @@ export function createCaptcha(request: NextRequest) {
     httpOnly: true,
     sameSite: "strict",
     secure: isSecureRequest(request),
-    path: "/api/register",
+    // 验证码会在 /api/captcha 生成、在 /api/register 提交；cookie 需要覆盖整个 API 域名下的
+    // 注册相关接口，否则浏览器不会把它带到 POST /api/register 请求中。
+    path: "/api",
     maxAge: captchaLifetimeSeconds,
   });
   return response;
@@ -251,8 +254,16 @@ const timingDecoyHash = () => (decoyHash ??= bcrypt.hash(randomBytes(24).toStrin
 function sessionResponse(
   user: { id: number; username: string; isAdmin: boolean },
   request: NextRequest,
+  profileComplete: boolean,
 ) {
-  const response = NextResponse.json({ ok: true, login: true, username: user.username });
+  const response = NextResponse.json({
+    ok: true,
+    login: true,
+    username: user.username,
+    // 前端据此决定登录后落地页：资料齐全回首页，资料缺失去个人主页补全。
+    profile_complete: profileComplete,
+    is_admin: user.isAdmin,
+  });
   response.cookies.set(cookieName, createSessionToken(user.id), {
     httpOnly: true,
     sameSite: "lax",
@@ -288,7 +299,7 @@ export async function signIn(request: NextRequest) {
     );
   }
 
-  const user = await prisma.user.findUnique({ where: { username } });
+  const user = await prisma.user.findUnique({ where: { username }, include: { profile: true } });
   const passwordMatches = await bcrypt.compare(
     password,
     user?.passwordHash ?? (await timingDecoyHash()),
@@ -310,7 +321,15 @@ export async function signIn(request: NextRequest) {
       { status: 403 },
     );
   }
-  return sessionResponse(user, request);
+  // 资料是否齐全决定登录后跳首页还是个人主页：新注册（或没填过资料）的账号先去补资料。
+  const profileComplete =
+    missingSignupRequirements({
+      gameName: user.profile?.gameName ?? "",
+      mainPosition: user.profile?.mainPosition ?? "",
+      rank: user.profile?.rank ?? "",
+      kookName: user.kookName,
+    }).length === 0;
+  return sessionResponse(user, request, profileComplete);
 }
 
 export async function register(request: NextRequest) {
@@ -343,7 +362,7 @@ export async function register(request: NextRequest) {
       message: "注册成功，请等待管理员审核后再登录。",
       username: user.username,
     });
-    response.cookies.delete({ name: captchaCookieName, path: "/api/register" });
+    response.cookies.delete({ name: captchaCookieName, path: "/api" });
     return response;
   } catch (error) {
     if ((error as { code?: string }).code === "P2002") {

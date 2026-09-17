@@ -118,12 +118,18 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
       const result = await response.json().catch(() => ({}));
       if (isRegister && result.code === "CAPTCHA_INVALID") void refreshCaptcha();
       if (!response.ok || !result.ok) throw new Error(result.error || "请求失败，请稍后重试");
-      // 注册后账号处于待审核状态、不签发会话，因此回登录页而不是个人主页。
-      await messageApi.success(
-        isRegister ? result.message || "注册成功，请等待管理员审核后再登录。" : "登录成功",
-        isRegister ? 2 : 1,
-      );
-      router.push(isRegister ? "/login" : "/profile");
+      if (isRegister) {
+        // 注册后账号处于待审核状态、不签发会话，因此回登录页而不是个人主页。
+        await messageApi.success(result.message || "注册成功，请等待管理员审核后再登录。", 2);
+        router.push("/login");
+        router.refresh();
+        return;
+      }
+      // 资料齐全的老用户直接进首页；刚注册/资料没填全的用户先去个人主页补资料。
+      // 核心管理员是系统账号，不参赛也不展示报名入口，因此同样直接进首页。
+      const toProfile = result.profile_complete === false && result.is_admin !== true;
+      await messageApi.success(toProfile ? "登录成功，请先完善个人资料" : "登录成功", 2);
+      router.push(toProfile ? "/profile" : "/");
       router.refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "请求失败，请稍后重试");

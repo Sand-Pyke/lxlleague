@@ -38,9 +38,11 @@ export async function getHomeBoard() {
     championCount(),
     prisma.user.count(),
   ]);
+  // 榜单只统计打完过比赛的选手：没有任何赛果时返回空数组，由前端展示空状态。
+  const ranked = players.filter((player) => player.games > 0);
   return NextResponse.json({
-    rank_top: players.slice(0, 5).map(legacyPlayer),
-    mvp_top: [...players]
+    rank_top: ranked.slice(0, 5).map(legacyPlayer),
+    mvp_top: [...ranked]
       .sort((a, b) => b.mvp - a.mvp || b.points - a.points)
       .slice(0, 5)
       .map(legacyPlayer),
@@ -177,11 +179,16 @@ export async function getHomeBoardV2() {
   }
 
   const players = await listPlayerCards();
+  // 同 getHomeBoard：排行与 MVP 只统计有战绩的选手，无赛果时榜单为空。
+  const ranked = players.filter((player) => player.games > 0);
   return NextResponse.json({
     live_matches: liveMatches,
-    rank_top: players.slice(0, 8).map(legacyPlayer),
+    rank_top: ranked.slice(0, 8).map(legacyPlayer),
     recent,
-    mvp_top: [...players].sort((a, b) => b.mvp - a.mvp).slice(0, 4).map(legacyPlayer),
+    mvp_top: [...ranked]
+      .sort((a, b) => b.mvp - a.mvp)
+      .slice(0, 4)
+      .map(legacyPlayer),
     total_match: await prisma.match.count(),
     total_player: players.length,
     total_champion: players.filter((player) => player.teamChampion > 0).length,

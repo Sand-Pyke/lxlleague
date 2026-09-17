@@ -1,12 +1,14 @@
 "use client";
 
-import { DeleteOutlined, ReloadOutlined } from "@ant-design/icons";
+import { DeleteOutlined, KeyOutlined, ReloadOutlined } from "@ant-design/icons";
 import {
   Alert,
   Button,
   Card,
+  Checkbox,
   Empty,
   Input,
+  Modal,
   Popconfirm,
   Select,
   Space,
@@ -57,6 +59,8 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState<ReviewStatus | "ALL">("ALL");
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [resetTarget, setResetTarget] = useState<AdminUser | null>(null);
+  const [resetAcknowledged, setResetAcknowledged] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -84,8 +88,10 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
         message.success(successText(data, fallback));
         await load();
         onChanged?.();
+        return true;
       } catch (requestError) {
         message.error(errorText(requestError, fallback));
+        return false;
       } finally {
         setBusyId(null);
       }
@@ -106,6 +112,11 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
   }, [keyword, statusFilter, users]);
 
   const pendingCount = users.filter((user) => user.status === "PENDING").length;
+
+  function openResetConfirm(user: AdminUser) {
+    setResetTarget(user);
+    setResetAcknowledged(false);
+  }
 
   const columns: ColumnsType<AdminUser> = [
     {
@@ -212,20 +223,34 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
 
           {/* 已通过的正式账号：只管权限与去留。 */}
           {user.status === "APPROVED" ? (
-            <Button
-              size="small"
-              loading={busyId === user.id}
-              onClick={() =>
-                void run(
-                  () =>
-                    postJson("/api/admin/users/admin", { userId: user.id, isAdmin: !user.isAdmin }),
-                  user.id,
-                  "管理员权限已更新",
-                )
-              }
-            >
-              {user.isAdmin ? "取消管理员" : "设为管理员"}
-            </Button>
+            <>
+              <Button
+                size="small"
+                loading={busyId === user.id}
+                onClick={() =>
+                  void run(
+                    () =>
+                      postJson("/api/admin/users/admin", {
+                        userId: user.id,
+                        isAdmin: !user.isAdmin,
+                      }),
+                    user.id,
+                    "管理员权限已更新",
+                  )
+                }
+              >
+                {user.isAdmin ? "取消管理员" : "设为管理员"}
+              </Button>
+              <Button
+                size="small"
+                danger
+                icon={<KeyOutlined />}
+                loading={busyId === user.id}
+                onClick={() => openResetConfirm(user)}
+              >
+                重置密码
+              </Button>
+            </>
           ) : null}
 
           {/* 已拒绝的账号保留重新通过的退路（误操作后不用先打回待审核）。 */}
@@ -319,6 +344,41 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
       ) : (
         <Empty description="没有符合条件的账号" />
       )}
+      <Modal
+        title="高危操作：重置用户密码"
+        open={Boolean(resetTarget)}
+        okText="确认重置"
+        cancelText="取消"
+        okButtonProps={{ danger: true, disabled: !resetAcknowledged }}
+        confirmLoading={resetTarget ? busyId === resetTarget.id : false}
+        onCancel={() => {
+          if (!busyId) setResetTarget(null);
+        }}
+        onOk={() => {
+          if (!resetTarget || !resetAcknowledged) return;
+          void run(
+            () => postJson("/api/admin/users/password", { userId: resetTarget.id }),
+            resetTarget.id,
+            "密码重置成功，请通知用户修改密码",
+          ).then((success) => {
+            if (success) setResetTarget(null);
+          });
+        }}
+      >
+        <Alert
+          type="error"
+          showIcon
+          message={`你即将重置用户「${resetTarget?.username ?? ""}」的密码`}
+          description="这是高危操作。密码将被设置为 lxl123456，原密码立即失效。请仅在确认用户身份后操作，并通知用户登录后马上修改密码。"
+        />
+        <Checkbox
+          style={{ marginTop: 16 }}
+          checked={resetAcknowledged}
+          onChange={(event) => setResetAcknowledged(event.target.checked)}
+        >
+          我已知晓该操作的风险，并确认要重置密码
+        </Checkbox>
+      </Modal>
     </Card>
   );
 }

@@ -8,7 +8,6 @@ import {
 } from "@/lib/admin-options";
 import { prisma } from "@/lib/prisma";
 import { GAME_NAME_HINT, isValidGameName } from "@/lib/game-name";
-import { passwordFormatError } from "@/lib/credentials";
 import { randomDefaultAvatar } from "@/lib/default-avatars";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
@@ -297,17 +296,23 @@ export async function setUserGameName(userId: number, gameName: string) {
   return { msg: `已设置 ${user.username} 的游戏ID：${value || "(空)"}` };
 }
 
-/** 管理员重置密码（原 /api/admin/reset_pwd）。 */
-export async function resetUserPassword(userId: number, password: string) {
-  const passwordError = passwordFormatError(typeof password === "string" ? password : "");
-  if (passwordError) throw badRequest(passwordError);
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { username: true } });
+export const ADMIN_RESET_PASSWORD = "lxl123456";
+
+/** 管理员重置已注册用户密码，重置后必须通知用户尽快修改密码。 */
+export async function resetUserPassword(userId: number) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { username: true, status: true },
+  });
   if (!user) throw badRequest("用户不存在");
+  if (user.status !== "APPROVED") throw badRequest("只有已注册用户可以重置密码");
   await prisma.user.update({
     where: { id: userId },
-    data: { passwordHash: await bcrypt.hash(password, 12) },
+    data: { passwordHash: await bcrypt.hash(ADMIN_RESET_PASSWORD, 12) },
   });
-  return { msg: `用户 ${user.username} 密码重置成功` };
+  return {
+    msg: `用户 ${user.username} 密码已重置为 ${ADMIN_RESET_PASSWORD}，请通知用户尽快修改密码`,
+  };
 }
 
 export async function setUserAdmin(userId: number, isAdmin: boolean) {

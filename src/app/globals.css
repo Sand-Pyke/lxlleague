@@ -2142,7 +2142,7 @@ body {
 }
 
 .profile-empty-card {
-  max-width: 620px;
+  /* max-width: 620px; */
   margin: 48px auto;
   width: 100%;
 }
@@ -2264,6 +2264,13 @@ body {
   flex-direction: column;
   gap: 4px;
   margin-bottom: 10px;
+}
+
+.players-hero-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
 }
 
 .players-hero {
@@ -2639,7 +2646,6 @@ body {
 }
 
 .prof-settings-note {
-  margin: 10px 0 0;
   font-size: 12px;
   color: var(--league-muted);
 }
@@ -3108,9 +3114,8 @@ body {
   background: #eef2ff;
 }
 
-/* 注册页的段位提示：贴在段位下拉下方，与下一个表单项留出间距。 */
-.auth-rank-notice {
-  margin-bottom: 24px;
+.ant-alert.ant-alert-warning.ant-alert-outlined.ant-alert-with-description.auth-rank-notice{
+  margin-bottom: 10px;
 }
 
 /* ---------- 段位展示 ---------- */

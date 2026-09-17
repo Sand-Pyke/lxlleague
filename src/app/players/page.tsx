@@ -80,16 +80,33 @@ const resultDots = (recent: string) =>
       </span>
     ));
 
+/**
+ * 资料卡的「常用英雄」：优先用选手自己设置的（最多 3 个），没设置时回退到战绩里最常用的那个。
+ * 与个人主页档案卡的取值口径保持一致（components/profile/profile-view.tsx 的 heroStrip）。
+ */
+function heroNames(player: Player) {
+  if (player.favoriteHeroes?.length) return player.favoriteHeroes;
+  return player.hero ? [player.hero] : [];
+}
+
 function HeroCell({ player }: { player: Player }) {
-  const icon = championIcon(player.hero);
+  const heroes = heroNames(player);
+  if (!heroes.length) return <span className="players-hero-empty" />;
   return (
-    <span className="players-hero">
-      {icon ? (
-        <img src={icon} alt={player.hero} loading="lazy" />
-      ) : (
-        <span className="players-hero-empty" />
-      )}
-      <span>{player.hero || "--"}</span>
+    <span className="players-hero-list">
+      {heroes.map((hero) => {
+        const icon = championIcon(hero);
+        return (
+          <span className="players-hero" key={hero}>
+            {icon ? (
+              <img src={icon} alt={hero} loading="lazy" />
+            ) : (
+              <span className="players-hero-empty" />
+            )}
+            <span>{hero}</span>
+          </span>
+        );
+      })}
     </span>
   );
 }
@@ -120,6 +137,7 @@ export default function PlayersPage() {
         player.username.toLowerCase().includes(keyword) ||
         String(player.id).includes(keyword) ||
         (player.hero ?? "").toLowerCase().includes(keyword) ||
+        (player.favoriteHeroes ?? []).some((hero) => hero.toLowerCase().includes(keyword)) ||
         (player.position ?? "").toLowerCase().includes(keyword) ||
         positionText(player.position).includes(keyword) ||
         (player.rank ?? "").includes(keyword) ||
