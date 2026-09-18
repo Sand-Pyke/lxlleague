@@ -157,7 +157,7 @@ export default function PlayersPage() {
           <Avatar src={player.avatar || undefined} icon={<TeamOutlined />} />
           <span>
             <b>{player.name}</b>
-            <small>{player.gameName || player.username}</small>
+            <small>{player.gameName || "未设置"}</small>
           </span>
         </Link>
       ),
@@ -259,7 +259,7 @@ export default function PlayersPage() {
                       <Avatar size={40} src={player.avatar || undefined} icon={<TeamOutlined />} />
                       <div>
                         <b>{player.name}</b>
-                        <small>{player.gameName || player.username}</small>
+                        <small>{player.gameName || "未设置"}</small>
                       </div>
                       <span className="players-uid">ID:{player.id}</span>
                     </div>
@@ -269,10 +269,12 @@ export default function PlayersPage() {
                         <RankLabel rank={player.rank} />
                       </Tag>
                     </div>
-                    <div className="players-hero-row">
-                      <span className="players-hero-label">常用英雄</span>
-                      <HeroCell player={player} />
-                    </div>
+                    {heroNames(player).length > 0 && (
+                      <div className="players-hero-row">
+                        <span className="players-hero-label">常用英雄</span>
+                        <HeroCell player={player} />
+                      </div>
+                    )}
                     <Row className="players-stats">
                       <Col span={8}>
                         <b className="prof-green">{player.winRate}%</b>
