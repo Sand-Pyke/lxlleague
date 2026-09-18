@@ -22,7 +22,7 @@ import { LeagueShell } from "@/components/app-shell";
 import { RankLabel } from "@/components/rank-label";
 import { POSITION_OPTIONS, RANKS, positionText } from "@/lib/admin-options";
 import type { Player } from "@/lib/data";
-import { championIcon } from "@/lib/game-assets";
+import { championAsset, championIcon } from "@/lib/game-assets";
 
 /**
  * 段位筛选：与旧选手页一致，外形与其它筛选下拉保持一致。
@@ -89,6 +89,22 @@ function heroNames(player: Player) {
   return player.hero ? [player.hero] : [];
 }
 
+/** 关键词是否命中选手的常用英雄（支持中文称号 / 英雄名 / 英文别名）。 */
+function heroMatches(player: Player, keyword: string) {
+  const heroes = heroNames(player);
+  if (!heroes.length) return false;
+  const kw = keyword.toLowerCase();
+  return heroes.some((hero) => {
+    const champion = championAsset(hero);
+    if (!champion) return hero.toLowerCase().includes(kw);
+    return (
+      champion.name.toLowerCase().includes(kw) ||
+      champion.title.toLowerCase().includes(kw) ||
+      champion.alias.toLowerCase().includes(kw)
+    );
+  });
+}
+
 function HeroCell({ player }: { player: Player }) {
   const heroes = heroNames(player);
   if (!heroes.length) return <span className="players-hero-empty" />;
@@ -136,8 +152,7 @@ export default function PlayersPage() {
         player.name.toLowerCase().includes(keyword) ||
         player.username.toLowerCase().includes(keyword) ||
         String(player.id).includes(keyword) ||
-        (player.hero ?? "").toLowerCase().includes(keyword) ||
-        (player.favoriteHeroes ?? []).some((hero) => hero.toLowerCase().includes(keyword)) ||
+        heroMatches(player, keyword) ||
         (player.position ?? "").toLowerCase().includes(keyword) ||
         positionText(player.position).includes(keyword) ||
         (player.rank ?? "").includes(keyword) ||
@@ -193,7 +208,7 @@ export default function PlayersPage() {
         <Input
           allowClear
           className="players-search"
-          placeholder="搜索选手昵称/ID/常用英雄/位置"
+          placeholder="搜索昵称/ID/英雄(中英文)/位置"
           prefix={<SearchOutlined />}
           value={filters.keyword}
           onChange={(event) => setFilters({ ...filters, keyword: event.target.value })}

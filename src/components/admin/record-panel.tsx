@@ -149,7 +149,15 @@ function ItemIcons({ items }: { items: string[] }) {
   );
 }
 
-export function RecordPanel({ matchId, signs }: { matchId: number; signs: RosterSign[] }) {
+export function RecordPanel({
+  matchId,
+  signs,
+  currentRound,
+}: {
+  matchId: number;
+  signs: RosterSign[];
+  currentRound?: number;
+}) {
   const [rows, setRows] = useState<RecordRow[]>([]);
   const [users, setUsers] = useState<AdminUserOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -220,7 +228,10 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
         setRows(list);
         const nextGame = list.reduce((max, row) => Math.max(max, row.game_no), 0) + 1;
         setGameNo(Math.min(nextGame, maxGameNo));
-        setRoundNo(list.reduce((max, row) => Math.max(max, row.round_no), 0) || 1);
+        // 新录入默认落在当前轮，避免和赛果页（默认展示当前轮）错开。
+        setRoundNo(
+          currentRound || list.reduce((max, row) => Math.max(max, row.round_no), 0) || 1,
+        );
       } else {
         setRows([]);
         setGameNo(1);
@@ -239,7 +250,7 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
     } finally {
       setLoading(false);
     }
-  }, [matchId, signs.length]);
+  }, [matchId, signs.length, currentRound]);
 
   useEffect(() => {
     void load();

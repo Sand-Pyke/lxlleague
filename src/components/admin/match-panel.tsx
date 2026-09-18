@@ -719,7 +719,13 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
         onClose={() => setRecordsOpen(false)}
         destroyOnHidden
       >
-        {selected ? <RecordPanel matchId={selected.id} signs={board?.signs ?? []} /> : null}
+        {selected ? (
+          <RecordPanel
+            matchId={selected.id}
+            signs={board?.signs ?? []}
+            currentRound={selected.currentRound}
+          />
+        ) : null}
       </Drawer>
     </Space>
   );
