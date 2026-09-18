@@ -59,8 +59,6 @@ export type TeamsBoard = {
     id: number;
     name: string;
     status: string;
-    team1_id: number | null;
-    team2_id: number | null;
     use_fee: boolean;
     bo: string;
   };
@@ -227,8 +225,6 @@ export function RosterPanel({ board, loading, onReload }: Props) {
                 {budget ? ` / ${budget}` : ""}
               </Tag>
             ) : null}
-            {match.team1_id === team.id ? <Tag color="blue">蓝队</Tag> : null}
-            {match.team2_id === team.id ? <Tag color="red">红队</Tag> : null}
           </Space>
         }
         extra={

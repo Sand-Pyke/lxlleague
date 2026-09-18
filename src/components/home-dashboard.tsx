@@ -183,13 +183,6 @@ export function HomeDashboard({ matches, players }: Props) {
           {recentMatch ? (
             <>
               <Typography.Title level={4}>{recentMatch.name}</Typography.Title>
-              <div className="score-row">
-                <b>{recentMatch.teams[0]}</b>
-                <strong>
-                  {recentMatch.score[0]} <i>:</i> {recentMatch.score[1]}
-                </strong>
-                <b>{recentMatch.teams[1]}</b>
-              </div>
               <div className="result-note">
                 <Status status="FINISHED" /> {recentMatch.round}
               </div>

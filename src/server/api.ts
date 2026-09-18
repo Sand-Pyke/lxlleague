@@ -96,6 +96,7 @@ const KIND_ERRORS: Record<string, { status: number; message: string }> = {
   no_score: { status: 400, message: "本轮还有对战未录入比分，请先录入全部对战结果" },
   tie: { status: 400, message: "本轮有对阵比分打平，请录入分出胜负的系列比分" },
   bad_team_count: { status: 400, message: "参赛队伍数必须是 2/4/8/16/32 支" },
+  not_started: { status: 400, message: "赛事尚未开始（待选人阶段）" },
   already_finished: { status: 400, message: "赛事已结束，无需再次结束本轮" },
   rate_limited: { status: 429, message: "录入过于频繁，请稍后再试" },
 };

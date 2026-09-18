@@ -7,6 +7,7 @@ import {
   Card,
   Empty,
   Input,
+  Modal,
   Popconfirm,
   Select,
   Space,
@@ -18,13 +19,14 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { positionText } from "@/lib/admin-options";
+import { NO_SUB_POSITION, POSITION_OPTIONS, positionText, subPositionChoices } from "@/lib/admin-options";
 import { asArray, errorText, getJson, postJson, successText } from "./api-client";
 
 type SignupRow = {
   sign_id: number;
   user_id: number;
   username: string;
+  game_name: string;
   match_id: number;
   match_name: string;
   yy_name: string;
@@ -40,6 +42,9 @@ export function SignupPanel() {
   const [keyword, setKeyword] = useState("");
   const [matchFilter, setMatchFilter] = useState<number | "ALL">("ALL");
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [positionRow, setPositionRow] = useState<SignupRow | null>(null);
+  const [positionMain, setPositionMain] = useState("TOP");
+  const [positionSub, setPositionSub] = useState(NO_SUB_POSITION);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,6 +76,32 @@ export function SignupPanel() {
     }
   }
 
+  function openPositionEditor(row: SignupRow) {
+    setPositionRow(row);
+    const main = POSITION_OPTIONS.includes(row.main_pos) ? row.main_pos : POSITION_OPTIONS[0];
+    setPositionMain(main);
+    const rawSub = row.sub_pos && row.sub_pos !== "FILL" ? row.sub_pos : NO_SUB_POSITION;
+    setPositionSub(rawSub === main ? NO_SUB_POSITION : rawSub);
+  }
+
+  async function savePosition() {
+    if (!positionRow) return;
+    setBusyId(positionRow.sign_id);
+    try {
+      const data = await postJson(`/api/admin/sign/position/${positionRow.sign_id}`, {
+        main_pos: positionMain,
+        sub_pos: positionSub,
+      });
+      message.success(successText(data, "位置已更新"));
+      setPositionRow(null);
+      await load();
+    } catch (requestError) {
+      message.error(errorText(requestError, "更新失败"));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const matchOptions = useMemo(() => {
     const seen = new Map<number, string>();
     for (const row of rows) seen.set(row.match_id, row.match_name);
@@ -85,7 +116,10 @@ export function SignupPanel() {
     return rows.filter((row) => {
       if (matchFilter !== "ALL" && row.match_id !== matchFilter) return false;
       if (!text) return true;
-      return [row.username, row.yy_name, row.match_name].join(" ").toLowerCase().includes(text);
+      return [row.username, row.game_name, row.yy_name, row.match_name]
+        .join(" ")
+        .toLowerCase()
+        .includes(text);
     });
   }, [keyword, matchFilter, rows]);
 
@@ -98,12 +132,22 @@ export function SignupPanel() {
       width: 140,
     },
     {
-      title: "YY / 语音名",
+      title: "游戏名称",
+      dataIndex: "game_name",
+      key: "game_name",
+      width: 140,
+      render: (value: string) =>
+        value || <Typography.Text type="secondary">未填写</Typography.Text>,
+    },
+    {
+      title: "KOOK / 语音名",
       dataIndex: "yy_name",
       key: "yy_name",
       width: 150,
-      render: (value: string) => value || <Typography.Text type="secondary">未填写</Typography.Text>,
+      render: (value: string) =>
+        value || <Typography.Text type="secondary">未填写</Typography.Text>,
     },
+
     {
       title: "位置",
       key: "positions",
@@ -125,19 +169,24 @@ export function SignupPanel() {
     {
       title: "操作",
       key: "actions",
-      width: 120,
+      width: 200,
       render: (_, row) => (
-        <Popconfirm
-          title={`取消 ${row.username} 的报名？`}
-          okText="取消报名"
-          okButtonProps={{ danger: true }}
-          cancelText="返回"
-          onConfirm={() => cancelSignup(row)}
-        >
-          <Button size="small" danger loading={busyId === row.sign_id}>
-            取消报名
+        <Space size={4}>
+          <Button size="small" onClick={() => openPositionEditor(row)}>
+            更换位置
           </Button>
-        </Popconfirm>
+          <Popconfirm
+            title={`取消 ${row.username} 的报名？`}
+            okText="取消报名"
+            okButtonProps={{ danger: true }}
+            cancelText="返回"
+            onConfirm={() => cancelSignup(row)}
+          >
+            <Button size="small" danger loading={busyId === row.sign_id}>
+              取消报名
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -159,7 +208,7 @@ export function SignupPanel() {
       <Space wrap style={{ marginBottom: 12 }}>
         <Input.Search
           allowClear
-          placeholder="搜索账号 / 语音名"
+          placeholder="搜索账号 / 游戏名 / 语音名"
           style={{ width: 260 }}
           value={keyword}
           onChange={(event) => setKeyword(event.target.value)}
@@ -186,6 +235,43 @@ export function SignupPanel() {
       ) : (
         <Empty description="暂无待选人的报名记录" />
       )}
+
+      <Modal
+        open={Boolean(positionRow)}
+        title={`更换位置 · ${positionRow?.username ?? ""}`}
+        okText="保存"
+        cancelText="取消"
+        confirmLoading={busyId === positionRow?.sign_id}
+        onCancel={() => setPositionRow(null)}
+        onOk={() => void savePosition()}
+      >
+        <Space orientation="vertical" size={10} style={{ width: "100%" }}>
+          <Select
+            style={{ width: "100%" }}
+            value={positionMain}
+            options={POSITION_OPTIONS.map((position) => ({
+              value: position,
+              label: positionText(position),
+            }))}
+            onChange={(value) => {
+              setPositionMain(value);
+              if (value === positionSub) setPositionSub(NO_SUB_POSITION);
+            }}
+          />
+          <Select
+            style={{ width: "100%" }}
+            value={positionSub}
+            options={[
+              { value: NO_SUB_POSITION, label: "无副位置" },
+              ...subPositionChoices(positionMain).map((position) => ({
+                value: position,
+                label: positionText(position),
+              })),
+            ]}
+            onChange={(value) => setPositionSub(value)}
+          />
+        </Space>
+      </Modal>
     </Card>
   );
 }

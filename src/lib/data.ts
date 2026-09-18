@@ -52,8 +52,6 @@ export type Match = {
   playerCount: number;
   teamCount: number;
   signed?: boolean;
-  teams: [string, string];
-  score: [number, number];
   round: string;
   /** 直播链接（仅 LIVE 状态可设置） */
   liveUrl: string;

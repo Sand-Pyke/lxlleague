@@ -107,10 +107,6 @@ export async function getMatchDetail(request: NextRequest, id: string | number) 
       round: match.round,
       use_fee: match.useFee,
       current_round: match.currentRound,
-      blue_team: match.blueTeam,
-      red_team: match.redTeam,
-      blue_score: match.blueScore,
-      red_score: match.redScore,
     },
     players: players.map((player) => ({
       id: player.signupId,

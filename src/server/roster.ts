@@ -159,6 +159,7 @@ export function totalRoundsFor(teamCount: number) {
 export async function endRound(matchId: number) {
   const match = await prisma.match.findUnique({ where: { id: matchId } });
   if (!match) return { kind: "not_found" as const };
+  if (match.status === "CREATED") return { kind: "not_started" as const };
   if (match.status === "FINISHED") return { kind: "already_finished" as const };
 
   const teams = await prisma.team.findMany({ where: { matchId }, orderBy: { id: "asc" } });

@@ -486,26 +486,15 @@ a {
   font-size: 18px;
   margin: 7px 0 24px;
 }
-.score-row,
-.big-score,
 .result-hero > div {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
 }
-.score-row strong {
-  font-size: 31px;
-  color: white;
-}
-.score-row strong i,
-.big-score i,
 .result-hero i {
   font-style: normal;
   color: #8b5cf6;
-}
-.score-row > b {
-  font-size: 17px;
 }
 .result-note {
   margin: 18px 0;
@@ -1177,16 +1166,6 @@ a {
   font-size: 12px;
   color: var(--muted);
 }
-.big-score {
-  min-width: 300px;
-}
-.big-score strong {
-  font-size: 40px;
-  color: white;
-}
-.big-score > b {
-  font-size: 18px;
-}
 .details {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1814,11 +1793,6 @@ a {
   .profile-stats {
     grid-template-columns: repeat(2, 1fr);
   }
-  .big-score {
-    min-width: 0;
-    width: 100%;
-    justify-content: center;
-  }
   .lineup {
     grid-template-columns: 1fr;
   }
@@ -2057,9 +2031,9 @@ body {
 
 /* ---------- 浅色主题下赛事中心的可读性 ---------- */
 
-/* 下面这些字面值是照深色底写死的：.button 是白字，.big-score strong（比分）与 .details dd
-   （赛事信息取值）也是白色，而浅色主题里 .panel / .match-hero 是白底（rgba(255,255,255,0.86)），
-   白字压白底只有 1.01:1，等于看不见；#c4b5fd / #a78bfa 用在白底上也只有 1.83:1 与 2.69:1。
+/* 下面这些字面值是照深色底写死的：.button 是白字，.details dd（赛事信息取值）也是白色，
+   而浅色主题里 .panel / .match-hero 是白底（rgba(255,255,255,0.86)），白字压白底只有 1.01:1，
+   等于看不见；#c4b5fd / #a78bfa 用在白底上也只有 1.83:1 与 2.69:1。
    因此这里把「浅色底上的文字」逐类压深。带渐变色填充的 .button.primary / .card-cta 与选中态
    .game-tabs a.selected 保留白字，仍由它们自己的基础规则负责，这里不碰。 */
 
@@ -2069,7 +2043,6 @@ body {
 }
 
 /* 比分与赛事信息取值。 */
-:root[data-theme="light"] .big-score strong,
 :root[data-theme="light"] .details dd {
   color: #172033;
 }

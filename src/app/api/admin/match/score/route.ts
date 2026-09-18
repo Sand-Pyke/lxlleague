@@ -18,15 +18,23 @@ export const POST = adminRoute(async ({ body }) => {
 
   const match = await prisma.match.findUnique({ where: { id: matchId } });
   if (!match) throw badRequest("赛事不存在");
+  if (match.status === "CREATED") throw badRequest("待选人阶段不能录入战果");
   if (!isValidBoScore(match.bo, scoreOne, scoreTwo)) throw badRequest(boScoreHint(match.bo));
 
-  await setScore({
-    matchId,
-    roundNo,
-    teamOneId: requiredId(body.teamOneId, "参数不完整"),
-    teamTwoId: requiredId(body.teamTwoId, "参数不完整"),
-    scoreOne,
-    scoreTwo,
+  const teamOneId = requiredId(body.teamOneId, "参数不完整");
+  const teamTwoId = requiredId(body.teamTwoId, "参数不完整");
+  const existing = await prisma.matchScore.findFirst({
+    where: {
+      matchId,
+      roundNo,
+      OR: [
+        { teamOneId, teamTwoId },
+        { teamOneId: teamTwoId, teamTwoId: teamOneId },
+      ],
+    },
   });
+  if (existing) throw badRequest("该对战已录入战果，不能修改");
+
+  await setScore({ matchId, roundNo, teamOneId, teamTwoId, scoreOne, scoreTwo });
   return { msg: "战果已保存" };
 });

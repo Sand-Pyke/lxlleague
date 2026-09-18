@@ -59,10 +59,14 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
   const [editForm, setEditForm] = useState<MatchForm | null>(null);
   const [liveValue, setLiveValue] = useState("");
   const [liveOpen, setLiveOpen] = useState(false);
-  const [pickValues, setPickValues] = useState<{ one?: number; two?: number }>({});
-  const [pickOpen, setPickOpen] = useState(false);
   const [scorePairs, setScorePairs] = useState<
-    { teamOneId: number; teamTwoId: number; scoreOne: number; scoreTwo: number }[]
+    {
+      teamOneId: number;
+      teamTwoId: number;
+      scoreOne: number;
+      scoreTwo: number;
+      hasScore: boolean;
+    }[]
   >([]);
   const [scoreOpen, setScoreOpen] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(false);
@@ -120,7 +124,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
     setBusy(true);
     try {
       const data = await action();
-      message.success(successText(data, fallback));
+      message?.success(successText(data, fallback));
       await loadMatches();
       onChanged?.();
       if (options.refreshBoard !== false && selectedId) await loadBoard(selectedId);
@@ -132,11 +136,6 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
       setBusy(false);
     }
   }
-
-  const teamOptions = (board?.teams ?? []).map((team) => ({
-    value: team.id,
-    label: `${team.name}（${team.player_count} 人）`,
-  }));
 
   const teamNameOf = (id: number | undefined | null) =>
     board?.teams.find((team) => team.id === id)?.name ?? (id ? `队伍 #${id}` : "");
@@ -335,6 +334,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
                 size="small"
                 style={{ width: 100 }}
                 value={selected.bo}
+                disabled={selected.status !== "CREATED"}
                 options={BO_OPTIONS.map((bo) => ({ value: bo, label: bo }))}
                 onChange={(bo) =>
                   void run(() => postJson(`/api/admin/match/set_bo/${selected.id}`, { bo }), "赛制已更新")
@@ -386,20 +386,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
               <Typography.Text type="secondary">对战与战果</Typography.Text>
               <Button
                 size="small"
-                disabled={!board?.teams.length}
-                onClick={() => {
-                  setPickValues({
-                    one: selected.teamOneId ?? undefined,
-                    two: selected.teamTwoId ?? undefined,
-                  });
-                  setPickOpen(true);
-                }}
-              >
-                选择对战队伍
-              </Button>
-              <Button
-                size="small"
-                disabled={!board?.teams.length}
+                disabled={!board?.teams.length || selected.status === "CREATED"}
                 onClick={() => {
                   setScorePairs(
                     (board?.round_pairs ?? []).map((pair) => ({
@@ -407,6 +394,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
                       teamTwoId: pair.team_two,
                       scoreOne: pair.score_one,
                       scoreTwo: pair.score_two,
+                      hasScore: pair.has_score,
                     })),
                   );
                   setScoreOpen(true);
@@ -416,7 +404,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
               </Button>
               <Button
                 size="small"
-                disabled={!board?.has_score}
+                disabled={!board?.has_score || selected.status === "CREATED"}
                 onClick={() =>
                   void run(
                     () => postJson(`/api/admin/match/round/end/${selected.id}`),
@@ -458,9 +446,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
               <Space wrap>
                 {board.teams.map((team) => (
                   <Tag key={team.id}>
-                    {team.name}
-                    {selected.teamOneId === team.id ? "（蓝队）" : ""}
-                    {selected.teamTwoId === team.id ? "（红队）" : ""} · {team.player_count} 人
+                    {team.name} · {team.player_count} 人
                     {board.match.use_fee ? ` · 已用 ${team.used_fee}` : ""}
                   </Tag>
                 ))}
@@ -563,6 +549,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
               placeholder="比赛名称"
               maxLength={100}
               value={editForm.name}
+              disabled={selected?.status !== "CREATED"}
               onChange={(event) => setEditForm({ ...editForm, name: event.target.value })}
             />
             <Input
@@ -610,53 +597,6 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
       </Modal>
 
       <Modal
-        open={pickOpen}
-        title="选择对战队伍"
-        okText="保存"
-        cancelText="取消"
-        confirmLoading={busy}
-        onCancel={() => setPickOpen(false)}
-        onOk={() => {
-          if (!selected) return;
-          void run(
-            () =>
-              postJson(`/api/admin/match/pick_teams/${selected.id}`, {
-                teamOneId: pickValues.one ?? null,
-                teamTwoId: pickValues.two ?? null,
-              }),
-            "对战队伍已保存",
-          ).then((succeeded) => {
-            if (succeeded) setPickOpen(false);
-          });
-        }}
-      >
-        <Space orientation="vertical" size={10} style={{ width: "100%" }}>
-          <span>
-            蓝队{" "}
-            <Select
-              style={{ width: 240 }}
-              allowClear
-              placeholder="选择蓝队"
-              value={pickValues.one}
-              options={teamOptions}
-              onChange={(one) => setPickValues({ ...pickValues, one })}
-            />
-          </span>
-          <span>
-            红队{" "}
-            <Select
-              style={{ width: 240 }}
-              allowClear
-              placeholder="选择红队"
-              value={pickValues.two}
-              options={teamOptions}
-              onChange={(two) => setPickValues({ ...pickValues, two })}
-            />
-          </span>
-        </Space>
-      </Modal>
-
-      <Modal
         open={scoreOpen}
         title="录入本轮战果"
         okText="保存"
@@ -670,7 +610,12 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
             message.error("当前轮次没有可录入的对阵");
             return;
           }
-          const invalidPair = scorePairs.find(
+          const editablePairs = scorePairs.filter((pair) => !pair.hasScore);
+          if (!editablePairs.length) {
+            message.error("本轮战果已全部录入，不能修改");
+            return;
+          }
+          const invalidPair = editablePairs.find(
             (pair) => !isValidBoScore(selected.bo, pair.scoreOne, pair.scoreTwo),
           );
           if (invalidPair) {
@@ -682,7 +627,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
           void run(
             () =>
               Promise.all(
-                scorePairs.map((pair) =>
+                editablePairs.map((pair) =>
                   postJson("/api/admin/match/score", {
                     matchId: selected.id,
                     roundNo: selected.currentRound || 1,
@@ -700,6 +645,9 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
         }}
       >
         <Space orientation="vertical" size={10} style={{ width: "100%" }}>
+          {scorePairs.some((pair) => pair.hasScore) ? (
+            <Alert type="info" showIcon title="已录入战果的对阵不可修改" />
+          ) : null}
           {scorePairs.length ? (
             scorePairs.map((pair, index) => (
               <div
@@ -711,6 +659,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
                   min={0}
                   max={selected ? (BO_WINS[selected.bo] ?? 0) : 0}
                   value={pair.scoreOne}
+                  disabled={pair.hasScore}
                   onChange={(value) =>
                     setScorePairs((prev) =>
                       prev.map((item, itemIndex) =>
@@ -724,6 +673,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
                   min={0}
                   max={selected ? (BO_WINS[selected.bo] ?? 0) : 0}
                   value={pair.scoreTwo}
+                  disabled={pair.hasScore}
                   onChange={(value) =>
                     setScorePairs((prev) =>
                       prev.map((item, itemIndex) =>
@@ -732,6 +682,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
                     )
                   }
                 />
+                {pair.hasScore ? <Tag color="green">已录入</Tag> : null}
                 <span style={{ flex: 1 }}>{teamNameOf(pair.teamTwoId)}</span>
               </div>
             ))

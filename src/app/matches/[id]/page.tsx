@@ -26,13 +26,6 @@ export default async function MatchDetail({ params }: { params: Promise<{ id: st
           <h1>{match.name}</h1>
           <span>{formatMatchDate(match.date)}</span>
         </div>
-        <div className="big-score">
-          <b>{match.teams[0]}</b>
-          <strong>
-            {match.score[0]} <i>:</i> {match.score[1]}
-          </strong>
-          <b>{match.teams[1]}</b>
-        </div>
       </section>
       <div className="detail-grid">
         <section className="panel">

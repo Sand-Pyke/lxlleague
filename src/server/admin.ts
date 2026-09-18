@@ -4,6 +4,7 @@ import {
   RANKS,
   REVIEW_STATUSES,
   normalizeRank,
+  normalizeSubPosition,
   type ReviewStatus,
 } from "@/lib/admin-options";
 import { prisma } from "@/lib/prisma";
@@ -14,16 +15,18 @@ import { randomBytes } from "node:crypto";
 import { ApiError, badRequest, forbidden, notFound } from "@/server/api";
 import { coreAdminUsername, isCoreAdminUsername } from "@/server/auth";
 import { assertCanManageUser, isCoreAdminActor } from "@/server/permissions";
-import { isPosition, matchBudget, pairTeams, rankFee, signRank } from "@/server/roster";
+import {
+  isBracketTeamCount,
+  isPosition,
+  matchBudget,
+  pairTeams,
+  rankFee,
+  signRank,
+  totalRoundsFor,
+} from "@/server/roster";
 import { listMatchRecords } from "@/server/records";
 
 const asText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
-
-function normalizeOptionalId(value: unknown): number | null {
-  if (value === null || value === undefined || value === "" || value === 0) return null;
-  const id = Number(value);
-  return Number.isInteger(id) && id > 0 ? id : null;
-}
 
 async function requireMatch(matchId: number) {
   const match = await prisma.match.findUnique({ where: { id: matchId } });
@@ -57,10 +60,14 @@ export async function createMatch(body: Record<string, unknown>) {
 }
 
 export async function updateMatch(matchId: number, body: Record<string, unknown>) {
-  await requireMatch(matchId);
+  const match = await requireMatch(matchId);
+  const started = match.status !== "CREATED";
   const data: { name?: string; status?: (typeof MATCH_STATUSES)[number]; round?: string } = {};
   const name = asText(body.name);
-  if (name) data.name = name.slice(0, 100);
+  if (name && name !== match.name) {
+    if (started) throw badRequest("比赛已开始，名称不可再修改");
+    data.name = name.slice(0, 100);
+  }
   if (MATCH_STATUSES.includes(body.status as (typeof MATCH_STATUSES)[number]))
     data.status = body.status as (typeof MATCH_STATUSES)[number];
   const round = asText(body.round);
@@ -70,7 +77,8 @@ export async function updateMatch(matchId: number, body: Record<string, unknown>
 }
 
 export async function setMatchBo(matchId: number, bo: string) {
-  await requireMatch(matchId);
+  const match = await requireMatch(matchId);
+  if (match.status !== "CREATED") throw badRequest("赛事已开始，赛制不可再修改");
   if (!BO_LIST.includes(bo)) throw badRequest("赛制无效");
   await prisma.match.update({ where: { id: matchId }, data: { bo } });
   return { msg: `赛制已改为 ${bo}` };
@@ -95,28 +103,44 @@ export async function setMatchLive(matchId: number, liveUrl: string) {
 export async function finishMatch(matchId: number) {
   const match = await requireMatch(matchId);
   if (match.status !== "LIVE") throw badRequest("只有进行中的赛事才能结束");
+
+  // 结束前必须录完本场所有战果：淘汰赛校验最后一轮，其他赛制校验当前轮。
+  const teams = await prisma.team.findMany({ where: { matchId }, orderBy: { id: "asc" } });
+  const finalRound = isBracketTeamCount(teams.length) ? totalRoundsFor(teams.length) : 1;
+  const roundNo = Math.max(match.currentRound || 1, finalRound);
+  const frozen = await prisma.matchRound.findMany({
+    where: { matchId, roundNo },
+    orderBy: { id: "asc" },
+  });
+  const pairs: [number, number][] = frozen.length
+    ? frozen.map((row) => [row.teamOneId, row.teamTwoId] as [number, number])
+    : roundNo === 1
+      ? pairTeams(match, teams).filter((pair): pair is [number, number] => pair[1] !== null)
+      : [];
+  if (!pairs.length) throw badRequest("该比赛还没有录入赛果，如果提前结束则不会再将该场比赛的结果发送到比赛记录");
+
+  const scores = await prisma.matchScore.findMany({
+    where: { matchId, roundNo },
+    select: { teamOneId: true, teamTwoId: true },
+  });
+  const scored = (teamOneId: number, teamTwoId: number) =>
+    scores.some(
+      (score) =>
+        (score.teamOneId === teamOneId && score.teamTwoId === teamTwoId) ||
+        (score.teamOneId === teamTwoId && score.teamTwoId === teamOneId),
+    );
+  if (!pairs.every(([teamOneId, teamTwoId]) => scored(teamOneId, teamTwoId)))
+    throw badRequest("该比赛还没有录入赛果，如果提前结束则不会再将该场比赛的结果发送到比赛记录");
+
   await prisma.match.update({ where: { id: matchId }, data: { status: "FINISHED" } });
   return { msg: "比赛已结束！" };
 }
 
 export async function finishPick(matchId: number) {
-  await requireMatch(matchId);
+  const match = await requireMatch(matchId);
+  if (match.status !== "CREATED") throw badRequest("只有待选人阶段的赛事才能开赛");
   await prisma.match.update({ where: { id: matchId }, data: { status: "LIVE" } });
   return { msg: "已结束选人，赛事开始！" };
-}
-
-export async function pickTeams(matchId: number, teamOneId: unknown, teamTwoId: unknown) {
-  await requireMatch(matchId);
-  const t1 = normalizeOptionalId(teamOneId);
-  const t2 = normalizeOptionalId(teamTwoId);
-  if (t1 !== null && t1 === t2) throw badRequest("两支队伍不能相同");
-  for (const id of [t1, t2]) {
-    if (id === null) continue;
-    const team = await prisma.team.findUnique({ where: { id } });
-    if (!team || team.matchId !== matchId) throw badRequest("队伍不属于该赛事");
-  }
-  await prisma.match.update({ where: { id: matchId }, data: { teamOneId: t1, teamTwoId: t2 } });
-  return { msg: "对战队伍已保存" };
 }
 
 /** 删除赛事并级联清理报名 / 队伍 / 战绩 / 轮次 / 战果。 */
@@ -208,8 +232,6 @@ export async function teamsBoard(matchId: number) {
       id: match.id,
       name: match.name,
       status: match.status,
-      team1_id: match.teamOneId,
-      team2_id: match.teamTwoId,
       use_fee: useFee,
       bo: match.bo || "BO1",
     },
@@ -477,13 +499,35 @@ export async function cancelSignup(signupId: number) {
   return { msg: "已取消该选手报名" };
 }
 
+/** 后台调整某条报名的位置（主/副位置），省去「取消报名再重新报名」。 */
+export async function changeSignupPosition(
+  signupId: number,
+  mainPosition: unknown,
+  subPosition: unknown,
+) {
+  const signup = await prisma.matchSignup.findUnique({
+    where: { id: signupId },
+    include: { match: { select: { status: true } } },
+  });
+  if (!signup) throw notFound("报名记录不存在");
+  if (signup.match.status !== "CREATED") throw badRequest("赛事已开始，不能调整报名位置");
+  assertSignupPayload(mainPosition, subPosition);
+  const main = String(mainPosition);
+  const sub = normalizeSubPosition(main, String(subPosition));
+  await prisma.matchSignup.update({
+    where: { id: signupId },
+    data: { mainPosition: main, subPosition: sub },
+  });
+  return { msg: "报名位置已更新" };
+}
+
 /** 待选人赛事的全部报名记录（后台「报名记录」Tab）。 */
 export async function signupList() {
   const signups = await prisma.matchSignup.findMany({
     where: { match: { status: "CREATED" } },
     orderBy: [{ matchId: "desc" }, { id: "asc" }],
     include: {
-      user: { select: { id: true, username: true } },
+      user: { select: { id: true, username: true, profile: { select: { gameName: true } } } },
       match: { select: { id: true, name: true } },
     },
   });
@@ -492,6 +536,7 @@ export async function signupList() {
       sign_id: signup.id,
       user_id: signup.userId,
       username: signup.user.username,
+      game_name: signup.user.profile?.gameName ?? "",
       match_id: signup.matchId,
       match_name: signup.match.name,
       yy_name: signup.displayName,

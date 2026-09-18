@@ -14,8 +14,6 @@ export function matchFrom(match: DbMatch, signed = false): Match {
     playerCount: match.playerCount,
     teamCount: match.teamCount,
     signed,
-    teams: [match.blueTeam, match.redTeam],
-    score: [match.blueScore, match.redScore],
     round: match.round,
     liveUrl: match.liveUrl,
     useFee: match.useFee,
