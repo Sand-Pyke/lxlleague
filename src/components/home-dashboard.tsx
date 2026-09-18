@@ -79,10 +79,18 @@ export function HomeDashboard({ matches, players }: Props) {
     .sort((a, b) => b.mvp - a.mvp || b.points - a.points)
     .slice(0, 5);
   const recentMatch = matches.find((match) => match.status === "FINISHED");
-  // 「今日赛事」只放一场：优先进行中的，否则取列表第一场，其余走「查看全部」。
-  const featuredMatch = matches.find((match) => match.status === "LIVE") ?? matches[0];
+  // 「今日赛事」最多放两场：进行中的优先，其余按时间升序；其余赛事走「查看全部」。
+  const featuredMatches = matches
+    .filter((match) => match.status !== "FINISHED")
+    .sort(
+      (a, b) =>
+        Number(b.status === "LIVE") - Number(a.status === "LIVE") ||
+        a.date.localeCompare(b.date),
+    )
+    .slice(0, 2);
   const finishedMatchCount = matches.filter((match) => match.status === "FINISHED").length;
-  const activeMatchCount = matches.filter((match) => match.status === "LIVE").length;
+  // 「活跃赛事」= 尚未结束的赛事（报名中/进行中），与「当前赛事」页签口径一致。
+  const activeMatchCount = matches.filter((match) => match.status !== "FINISHED").length;
 
   return (
     <LeagueShell>
@@ -113,23 +121,33 @@ export function HomeDashboard({ matches, players }: Props) {
         </Row>
         <Row className="dashboard-stats" gutter={[12, 12]}>
           <Col xs={8}>
-            <Statistic title="注册选手" value={players.length} />
+            <Link className="stat-link" href="/players">
+              <Statistic title="注册选手" value={players.length} />
+            </Link>
           </Col>
           <Col xs={8}>
-            <Statistic title="已完成对局" value={finishedMatchCount} />
+            <Link className="stat-link" href="/matches?tab=history">
+              <Statistic title="已完成对局" value={finishedMatchCount} />
+            </Link>
           </Col>
           <Col xs={8}>
-            <Statistic title="活跃赛事" value={activeMatchCount} />
+            <Link className="stat-link" href="/matches?tab=today">
+              <Statistic title="活跃赛事" value={activeMatchCount} />
+            </Link>
           </Col>
         </Row>
       </Card>
       {/* 四块面板等宽等高：.home-board 两列等分 + 行高取 1fr，「今日赛事」也在其中。 */}
       <div className="home-board">
         <HomePanel title="今日赛事" extra={<Link href="/matches">查看全部</Link>}>
-          {featuredMatch ? (
-            <Link className="match-spotlight" href={matchDestination(featuredMatch)}>
-              <MatchCardBody match={featuredMatch} />
-            </Link>
+          {featuredMatches.length ? (
+            <div className="match-duo">
+              {featuredMatches.map((match) => (
+                <Link key={match.id} className="match-spotlight" href={matchDestination(match)}>
+                  <MatchCardBody match={match} />
+                </Link>
+              ))}
+            </div>
           ) : (
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无赛事数据" />
           )}

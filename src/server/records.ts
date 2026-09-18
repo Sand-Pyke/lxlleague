@@ -613,7 +613,15 @@ export type PlayerCard = ReturnType<typeof toPlayer>;
 export async function listPlayerCards() {
   const [profiles, records] = await Promise.all([
     prisma.playerProfile.findMany({
-      where: { user: { is: { username: { not: coreAdminUsername } } } },
+      where: {
+        user: {
+          is: {
+            username: { not: coreAdminUsername },
+            // 待审核账号尚未通过审核，不出现在选手列表与首页注册选手统计中。
+            status: { not: "PENDING" },
+          },
+        },
+      },
       include: {
         user: { select: { username: true, kookName: true, backgroundImage: true, status: true } },
       },

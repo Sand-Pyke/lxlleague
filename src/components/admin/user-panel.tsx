@@ -18,7 +18,7 @@ import {
   message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type Key } from "react";
 import { useViewer } from "@/components/auth-provider";
 import { RankLabel } from "@/components/rank-label";
 import {
@@ -67,6 +67,11 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
   /** 正在重置段位的账号 + 选中的段位（undefined = 还没选）。 */
   const [rankTarget, setRankTarget] = useState<AdminUser | null>(null);
   const [rankValue, setRankValue] = useState<string | undefined>(undefined);
+  /** 批量审核：勾选的账号 ID（仅在「待审核」筛选下启用）、当前页码与每页条数。 */
+  const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -74,6 +79,7 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
     try {
       const data = await getJson("/api/admin/users");
       setUsers(asArray<AdminUser>(data.users));
+      setSelectedRowKeys([]);
     } catch (requestError) {
       setError(errorText(requestError, "无法读取用户列表"));
     } finally {
@@ -120,6 +126,47 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
 
   const pendingCount = users.filter((user) => user.status === "PENDING").length;
 
+  /** 列表变短后（如批量通过）自动把越界的页码收敛到最后一页。 */
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  /** 勾选当前页上的全部待审核账号。 */
+  const selectCurrentPage = () => {
+    const start = (page - 1) * pageSize;
+    const ids = filtered.slice(start, start + pageSize).map((user) => user.id);
+    setSelectedRowKeys(ids);
+  };
+
+  /** 批量通过当前勾选的账号，成功后刷新列表。 */
+  const approveSelected = async () => {
+    if (!selectedRowKeys.length) {
+      message.warning("请先勾选要审核的账号");
+      return;
+    }
+    setBatchBusy(true);
+    try {
+      const data = await postJson("/api/admin/users/batch-approve", { userIds: selectedRowKeys });
+      message.success(successText(data, "批量通过成功"));
+      setSelectedRowKeys([]);
+      await load();
+      onChanged?.();
+    } catch (requestError) {
+      message.error(errorText(requestError, "批量通过失败"));
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+
+  /** 仅在「待审核」筛选下开放勾选与批量操作。 */
+  const rowSelection = statusFilter === "PENDING"
+    ? {
+        selectedRowKeys,
+        onChange: (keys: Key[]) => setSelectedRowKeys(keys.map(Number)),
+      }
+    : undefined;
+
   const columns: ColumnsType<AdminUser> = [
     {
       title: "账号",
@@ -131,11 +178,11 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {user.isAdmin ? "管理员" : "普通用户"}
           </Typography.Text>
-        </Space>
+        </Space>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
       ),
     },
     {
-      title: "游戏资料",
+      title: "游戏资料待审核账号",
       key: "profile",
       render: (_, user) =>
         user.profile ? (
@@ -348,12 +395,20 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
             placeholder="搜索账号 / 游戏ID / KOOK"
             style={{ width: 260 }}
             value={keyword}
-            onChange={(event) => setKeyword(event.target.value)}
+            onChange={(event) => {
+              setKeyword(event.target.value);
+              setPage(1);
+              setSelectedRowKeys([]);
+            }}
           />
           <Select
             style={{ width: 150 }}
             value={statusFilter}
-            onChange={(value) => setStatusFilter(value)}
+            onChange={(value) => {
+              setStatusFilter(value);
+              setPage(1);
+              setSelectedRowKeys([]);
+            }}
             options={[
               { value: "ALL", label: "全部状态" },
               ...REVIEW_STATUSES.map((status) => ({
@@ -362,6 +417,29 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
               })),
             ]}
           />
+          {statusFilter === "PENDING" ? (
+            <>
+              <Button size="small" onClick={selectCurrentPage} disabled={!filtered.length}>
+                全选当前页
+              </Button>
+              <Popconfirm
+                title={`批量通过所选 ${selectedRowKeys.length} 个账号？`}
+                description="将把这批账号一次性设为已通过审核。"
+                okText="批量通过"
+                cancelText="取消"
+                onConfirm={() => void approveSelected()}
+              >
+                <Button
+                  size="small"
+                  type="primary"
+                  loading={batchBusy}
+                  disabled={!selectedRowKeys.length}
+                >
+                  批量通过{selectedRowKeys.length ? `（${selectedRowKeys.length}）` : ""}
+                </Button>
+              </Popconfirm>
+            </>
+          ) : null}
         </Space>
         {loading && !users.length ? (
           <div className="loading-state">
@@ -373,7 +451,20 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
             size="small"
             columns={columns}
             dataSource={filtered}
-            pagination={{ pageSize: 10, showSizeChanger: false }}
+            rowSelection={rowSelection}
+            scroll={{ y: 480 }}
+            pagination={{
+              pageSize,
+              showSizeChanger: true,
+              pageSizeOptions: [10, 20, 50, 100],
+              current: page,
+              onChange: setPage,
+              onShowSizeChange: (_current, size) => {
+                setPageSize(size);
+                setPage(1);
+                setSelectedRowKeys([]);
+              },
+            }}
           />
         ) : (
           <Empty description="没有符合条件的账号" />

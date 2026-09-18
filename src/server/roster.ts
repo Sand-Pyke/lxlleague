@@ -149,6 +149,19 @@ export async function endRound(matchId: number) {
   if (!pairs.length) return { kind: "empty" as const };
 
   const roundNo = match.currentRound || 1;
+  const scores = await prisma.matchScore.findMany({
+    where: { matchId, roundNo },
+    select: { teamOneId: true, teamTwoId: true },
+  });
+  const hasScoreFor = (teamOneId: number, teamTwoId: number) =>
+    scores.some(
+      (score) =>
+        (score.teamOneId === teamOneId && score.teamTwoId === teamTwoId) ||
+        (score.teamOneId === teamTwoId && score.teamTwoId === teamOneId),
+    );
+  if (!pairs.every(([teamOneId, teamTwoId]) => hasScoreFor(teamOneId, teamTwoId))) {
+    return { kind: "no_score" as const };
+  }
   await prisma.$transaction([
     prisma.matchRound.deleteMany({ where: { matchId, roundNo } }),
     prisma.matchRound.createMany({

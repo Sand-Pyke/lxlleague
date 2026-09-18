@@ -383,6 +383,14 @@ a {
   min-height: 0;
 }
 
+/* 「今日赛事」最多两场：左右各一半并排展示（只有一场时自动占满整行）。 */
+.match-duo {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
 /* 面板标题右侧的补充说明文字（如「按 MVP 次数排序」）。 */
 .panel-hint {
   font-size: 12px;
@@ -394,6 +402,9 @@ a {
   .home-board {
     grid-template-columns: minmax(0, 1fr);
     grid-auto-rows: auto;
+  }
+  .match-duo {
+    flex-direction: column;
   }
 }
 .home-grid,
@@ -1247,12 +1258,24 @@ a {
 .roster-group {
   flex: none;
   white-space: nowrap;
+  font: inherit;
   font-size: 11px;
   color: var(--muted);
   background: rgba(148, 163, 184, 0.08);
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 999px;
   padding: 2px 6px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.roster-group:hover {
+  color: #fff;
+  border-color: rgba(139, 92, 246, 0.6);
+}
+.roster-group--active {
+  color: #fff;
+  background: rgba(139, 92, 246, 0.24);
+  border-color: rgba(139, 92, 246, 0.7);
 }
 /* 报名选手行改成可点击的链接，点击进入该选手的个人主页。 */
 .roster-row {
@@ -1301,7 +1324,6 @@ a {
   border: 1px solid rgba(59, 130, 246, 0.4);
   border-radius: 14px;
   padding: 17px;
-  background: rgba(15, 23, 42, 0.73);
 }
 .lineup section.red {
   border-color: rgba(248, 113, 113, 0.38);
@@ -1856,32 +1878,47 @@ body {
   white-space: nowrap;
 }
 
-.league-menu.ant-menu {
+/* 顶部导航：纯横向滚动的自定义 <nav>，替代 antd Menu 的「…」溢出折叠。
+   移动端条目放不下时直接横向滑动，个人 / 管理后台左滑即可看到。 */
+.league-menu {
   flex: 1;
   min-width: 0;
-  border-bottom: 0;
-  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
 }
-
-.league-menu.ant-menu-horizontal::after {
+.league-menu::-webkit-scrollbar {
   display: none;
 }
 
-/* 顶部导航 Tab：只保留渐变文字高亮，彻底去掉下划线指示条。
-   antd 把下划线画在 .ant-menu-item::after 上（hover 与选中共用），
-   直接隐藏该伪元素比逐条覆盖 border / height 更稳。 */
-.league-menu.ant-menu-horizontal > .ant-menu-item::after,
-.league-menu.ant-menu-horizontal > .ant-menu-item:hover::after,
-.league-menu.ant-menu-horizontal > .ant-menu-item-active::after,
-.league-menu.ant-menu-horizontal > .ant-menu-item-selected::after,
-.league-menu.ant-menu-horizontal > .ant-menu-item-selected:hover::after {
-  display: none !important;
+.league-nav-item {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  color: var(--league-muted);
+  font-size: 14px;
+  white-space: nowrap;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+.league-nav-item:hover {
+  color: var(--league-text);
+  background: rgba(148, 163, 184, 0.12);
 }
 
-/* 渐变只作用于文字，图标保持 currentColor，避免 SVG 因 color: transparent 消失。 */
-.league-menu.ant-menu-horizontal > .ant-menu-item:hover .ant-menu-title-content,
-.league-menu.ant-menu-horizontal > .ant-menu-item-active .ant-menu-title-content,
-.league-menu.ant-menu-horizontal > .ant-menu-item-selected .ant-menu-title-content {
+/* 渐变只作用于文字，图标保持 currentColor，避免 SVG 因 color: transparent 消失。
+   选择器必须精确命中文字 span（.league-nav-item__label）：antd 图标也是 <span>，
+   若用 .league-nav-item > span 会把图标的 SVG 一并透明化。 */
+.league-nav-item:hover .league-nav-item__label,
+.league-nav-item--selected .league-nav-item__label {
   background-image: var(--tab-highlight-gradient);
   background-clip: text;
   -webkit-background-clip: text;
@@ -2071,26 +2108,15 @@ body {
     gap: 8px;
     padding: 8px 12px;
   }
-  .league-menu.ant-menu {
+  /* 导航独占第二行并横向滚动：不再有「…」折叠，个人 / 管理后台左滑即可看到。 */
+  .league-menu {
     order: 3;
-    /* 这里必须是 flex-basis 而不是 width：基础规则里的 flex: 1 已把 flex-basis 定为 0%，
-       此时 width: 100% 不参与换行计算，菜单既不换到第二行、又被 flex 压成几像素宽，
-       antd 的溢出折叠又据此测量，最终 6 个条目全部铺到屏幕外（实测 scrollWidth 887）。 */
     flex-basis: 100%;
+    width: 100%;
   }
-  /* 注意：.league-menu 与 antd 的 .ant-menu-overflow 是同一个 <ul>，
-     必须写成并集选择器；写成后代选择器（.league-menu .ant-menu-overflow）
-     会匹配不到任何元素——之前那条 justify-content: space-between 就是这样一直没生效的。
-     antd 默认 flex-wrap: nowrap，条目放不下时不会换行而是整体溢出到屏幕外
-     （实测视口 375 时 scrollWidth 达 887）。这里允许换行，横向溢出即消失。 */
-  .league-menu.ant-menu-overflow {
-    flex-wrap: wrap;
-    justify-content: flex-start;
-    height: auto;
-    row-gap: 4px;
-  }
-  .league-menu .ant-menu-item {
-    padding-inline: 7px;
+  .league-nav-item {
+    height: 36px;
+    padding: 0 12px;
   }
   .league-actions {
     margin-left: auto;
@@ -2150,6 +2176,22 @@ body {
   padding: 14px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--league-page-bg) 30%, transparent);
+}
+
+.dashboard-stats .stat-link {
+  display: block;
+  border-radius: 12px;
+}
+
+.dashboard-stats .stat-link .ant-statistic {
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.dashboard-stats .stat-link:hover .ant-statistic {
+  transform: translateY(-2px);
+  box-shadow: var(--league-shadow);
 }
 
 .antd-panel.ant-card {

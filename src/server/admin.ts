@@ -14,7 +14,7 @@ import { randomBytes } from "node:crypto";
 import { ApiError, badRequest, forbidden, notFound } from "@/server/api";
 import { coreAdminUsername, isCoreAdminUsername } from "@/server/auth";
 import { assertCanManageUser, isCoreAdminActor } from "@/server/permissions";
-import { isPosition, matchBudget, rankFee, signRank } from "@/server/roster";
+import { isPosition, matchBudget, pairTeams, rankFee, signRank } from "@/server/roster";
 import { listMatchRecords } from "@/server/records";
 
 const asText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
@@ -136,7 +136,7 @@ export async function deleteMatch(matchId: number) {
 /** 后台分队看板：队伍 + 每队已用费用 + 报名列表（含段位费用）。 */
 export async function teamsBoard(matchId: number) {
   const match = await requireMatch(matchId);
-  const [teams, signs] = await Promise.all([
+  const [teams, signs, scores] = await Promise.all([
     prisma.team.findMany({ where: { matchId }, orderBy: { id: "asc" } }),
     prisma.matchSignup.findMany({
       where: { matchId },
@@ -145,11 +145,21 @@ export async function teamsBoard(matchId: number) {
         user: {
           include: {
             profile: {
-              select: { rank: true, avatar: true, mainPosition: true, subPosition: true },
+              select: {
+                rank: true,
+                avatar: true,
+                mainPosition: true,
+                subPosition: true,
+                gameName: true,
+              },
             },
           },
         },
       },
+    }),
+    prisma.matchScore.findMany({
+      where: { matchId, roundNo: match.currentRound || 1 },
+      select: { teamOneId: true, teamTwoId: true, scoreOne: true, scoreTwo: true },
     }),
   ]);
 
@@ -159,6 +169,34 @@ export async function teamsBoard(matchId: number) {
     if (!sign.teamId) continue;
     usedByTeam.set(sign.teamId, (usedByTeam.get(sign.teamId) ?? 0) + rankFee(signRank(sign)));
   }
+
+  // 当前轮的所有对阵（可能同时有多组对战），以及每组是否已录入比分。
+  const roundNo = match.currentRound || 1;
+  const roundPairs = pairTeams(match, teams).filter(
+    (pair): pair is [number, number] => pair[1] !== null,
+  );
+  const scoreOf = (teamOneId: number, teamTwoId: number) => {
+    const direct = scores.find(
+      (score) => score.teamOneId === teamOneId && score.teamTwoId === teamTwoId,
+    );
+    if (direct) return [direct.scoreOne, direct.scoreTwo] as const;
+    const swapped = scores.find(
+      (score) => score.teamOneId === teamTwoId && score.teamTwoId === teamOneId,
+    );
+    if (swapped) return [swapped.scoreTwo, swapped.scoreOne] as const;
+    return null;
+  };
+  const round_pairs = roundPairs.map(([teamOneId, teamTwoId]) => {
+    const score = scoreOf(teamOneId, teamTwoId);
+    return {
+      team_one: teamOneId,
+      team_two: teamTwoId,
+      score_one: score ? score[0] : 0,
+      score_two: score ? score[1] : 0,
+      has_score: Boolean(score),
+    };
+  });
+  const has_score = round_pairs.length > 0 && round_pairs.every((pair) => pair.has_score);
 
   return {
     match: {
@@ -182,6 +220,7 @@ export async function teamsBoard(matchId: number) {
       user_id: sign.userId,
       username: sign.user.username,
       yy_name: sign.displayName,
+      game_name: sign.user.profile?.gameName ?? "",
       avatar: sign.user.profile?.avatar ?? "",
       rank: signRank(sign),
       main_pos: sign.mainPosition,
@@ -192,7 +231,9 @@ export async function teamsBoard(matchId: number) {
       pos_order: sign.positionOrder,
       fee: rankFee(signRank(sign)),
     })),
-    current_round: match.currentRound || 1,
+    current_round: roundNo,
+    has_score,
+    round_pairs,
     budget: useFee ? await matchBudget(matchId) : 0,
   };
 }
@@ -262,6 +303,46 @@ export async function setUserStatus(userId: number, status: unknown, actorId: nu
     data: { status: next, pendingRank: "", reviewNote: "" },
   });
   return { msg: "审核状态已更新", status: next };
+}
+
+/**
+ * 批量通过审核：把一批待审核账号一次性置为 APPROVED。
+ * 先整体校验（存在性、权限、状态、管理员边界），全部通过后再逐个落库，
+ * 避免校验到一半就改数据造成「部分成功」的尴尬状态。
+ */
+export async function batchApproveUsers(userIds: unknown, actorId: number) {
+  const ids = Array.isArray(userIds)
+    ? Array.from(new Set(userIds.map(Number).filter((n) => Number.isInteger(n) && n > 0)))
+    : [];
+  if (!ids.length) throw badRequest("请先选择要审核的账号");
+  if (ids.length > 100) throw badRequest("单次最多审核 100 个账号");
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, isAdmin: true, username: true, status: true, pendingRank: true },
+  });
+  const byId = new Map(users.map((user) => [user.id, user]));
+  for (const id of ids) {
+    const user = byId.get(id);
+    if (!user) throw notFound(`用户 #${id} 不存在`);
+    if (isCoreAdminUsername(user.username))
+      throw new ApiError(403, "不能修改超级vip管理员账号的审核状态");
+    if (user.isAdmin) throw new ApiError(409, `管理员账号 ${user.username} 不需要审核`);
+    if (user.status !== "PENDING")
+      throw badRequest(`账号 ${user.username} 不是待审核状态，无法批量通过`);
+    await assertCanManageUser(actorId, id);
+  }
+
+  for (const id of ids) {
+    const user = byId.get(id)!;
+    if (user.pendingRank) await writeUserRank(id, user.username, user.pendingRank);
+    await prisma.user.update({
+      where: { id },
+      // 与单个通过一致：审核结束后清掉待审段位与备注。
+      data: { status: "APPROVED", pendingRank: "", reviewNote: "" },
+    });
+  }
+  return { msg: `已批量通过 ${ids.length} 个账号`, count: ids.length };
 }
 
 /** 把段位落到资料上并同步历史报名快照；「未定段」统一折算成空串。 */

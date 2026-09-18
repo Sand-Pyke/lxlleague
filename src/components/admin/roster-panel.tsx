@@ -42,6 +42,7 @@ export type RosterSign = {
   user_id: number;
   username: string;
   yy_name: string;
+  game_name: string;
   avatar: string;
   rank: string;
   main_pos: string;
@@ -66,6 +67,14 @@ export type TeamsBoard = {
   teams: RosterTeam[];
   signs: RosterSign[];
   current_round: number;
+  has_score: boolean;
+  round_pairs: {
+    team_one: number;
+    team_two: number;
+    score_one: number;
+    score_two: number;
+    has_score: boolean;
+  }[];
   budget: number;
 };
 
@@ -143,7 +152,8 @@ export function RosterPanel({ board, loading, onReload }: Props) {
       if (!keyword) return true;
       return (
         (sign.username ?? "").toLowerCase().includes(keyword) ||
-        (sign.yy_name ?? "").toLowerCase().includes(keyword)
+        (sign.yy_name ?? "").toLowerCase().includes(keyword) ||
+        (sign.game_name ?? "").toLowerCase().includes(keyword)
       );
     });
   }, [unassigned, formalIds, poolFilter, poolRank, poolPos, poolKeyword]);
@@ -243,7 +253,7 @@ export function RosterPanel({ board, loading, onReload }: Props) {
                 <Avatar size="small" src={member.avatar || undefined}>
                   {member.username.slice(0, 1)}
                 </Avatar>
-                <Typography.Text style={{ minWidth: 96 }}>{member.username}</Typography.Text>
+                <Typography.Text style={{ minWidth: 96 }}>{member.game_name}</Typography.Text>
                 <Tag color="purple">
                   <RankLabel rank={member.rank} fallback="未定段" />
                 </Tag>
@@ -465,7 +475,7 @@ export function RosterPanel({ board, loading, onReload }: Props) {
             }
           >
             {pool.length ? (
-              <Space direction="vertical" size={6} style={{ width: "100%" }}>
+              <Space orientation="vertical" size={6} style={{ width: "100%" }}>
                 {pool.map((sign) => {
                   const targetTeam = pendingTeam[sign.id];
                   const slots = targetTeam ? occupied[targetTeam] : undefined;
@@ -474,15 +484,7 @@ export function RosterPanel({ board, loading, onReload }: Props) {
                       <Avatar size="small" src={sign.avatar || undefined}>
                         {sign.username.slice(0, 1)}
                       </Avatar>
-                      <Typography.Text style={{ minWidth: 96 }}>
-                        {sign.username}
-                        {sign.yy_name ? (
-                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                            {" "}
-                            · {sign.yy_name}
-                          </Typography.Text>
-                        ) : null}
-                      </Typography.Text>
+                      <Typography.Text style={{ minWidth: 96 }}>{sign.game_name}</Typography.Text>
                       <Tag color="purple">
                         <RankLabel rank={sign.rank} fallback="未定段" />
                       </Tag>

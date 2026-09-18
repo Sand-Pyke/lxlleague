@@ -11,25 +11,27 @@ import {
   TrophyOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-import { Avatar, Button, Dropdown, Layout, Menu, Space, Tag, Tooltip, Typography } from "antd";
+import { Avatar, Button, Dropdown, Layout, Space, Tag, Tooltip, Typography } from "antd";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useViewer } from "./auth-provider";
 import { useThemeMode } from "./theme-provider";
 
-const navigation = [
-  { key: "/", label: <Link href="/">首页</Link>, icon: <HomeOutlined /> },
-  { key: "/matches", label: <Link href="/matches">比赛</Link>, icon: <TrophyOutlined /> },
-  { key: "/players", label: <Link href="/players">选手</Link>, icon: <TeamOutlined /> },
-  { key: "/rankings", label: <Link href="/rankings">排行</Link>, icon: <OrderedListOutlined /> },
-  { key: "/profile", label: <Link href="/profile">个人</Link>, icon: <UserOutlined /> },
+type NavItem = { key: string; text: string; icon: ReactNode };
+
+const navigation: NavItem[] = [
+  { key: "/", text: "首页", icon: <HomeOutlined /> },
+  { key: "/matches", text: "比赛", icon: <TrophyOutlined /> },
+  { key: "/players", text: "选手", icon: <TeamOutlined /> },
+  { key: "/rankings", text: "排行", icon: <OrderedListOutlined /> },
+  { key: "/profile", text: "个人", icon: <UserOutlined /> },
 ];
 
 /** 管理后台入口：仅管理员可见，排在「个人」之后。 */
-const adminNavigationItem = {
+const adminNavigationItem: NavItem = {
   key: "/admin",
-  label: <Link href="/admin">管理后台</Link>,
+  text: "管理后台",
   icon: <SettingOutlined />,
 };
 
@@ -73,12 +75,19 @@ export function LeagueShell({ children }: { children: React.ReactNode }) {
           <Link href="/" className="league-brand">
             LXL 峡谷冠军联赛
           </Link>
-          <Menu
-            className="league-menu"
-            mode="horizontal"
-            selectedKeys={[selectedKey]}
-            items={menuItems}
-          />
+          <nav className="league-menu" aria-label="主导航">
+            {menuItems.map((item) => (
+              <Link
+                key={item.key}
+                href={item.key}
+                className={`league-nav-item${selectedKey === item.key ? " league-nav-item--selected" : ""}`}
+                aria-current={selectedKey === item.key ? "page" : undefined}
+              >
+                {item.icon}
+                <span className="league-nav-item__label">{item.text}</span>
+              </Link>
+            ))}
+          </nav>
           <Space size={8} className="league-actions">
             <Tooltip title={mode === "dark" ? "切换浅色模式" : "切换深色模式"}>
               <Button

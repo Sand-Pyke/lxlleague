@@ -40,6 +40,8 @@ const positionText = (value: string) => POSITION_TEXT[value] ?? (value || "未�
 /** 报名名单：按分路统计人数，默认只展示前 6 人，其余点「查看全部」展开。 */
 export function MatchRoster({ players }: { players: RosterPlayer[] }) {
   const [showAll, setShowAll] = useState(false);
+  // 当前选中的分路分类；null 表示「全部」。点击分类只显示该分类的选手，再点一次回到全部。
+  const [activePosition, setActivePosition] = useState<string | null>(null);
 
   const counts = useMemo(() => {
     const map = new Map<string, number>();
@@ -50,34 +52,66 @@ export function MatchRoster({ players }: { players: RosterPlayer[] }) {
     return map;
   }, [players]);
 
-  const hasMore = players.length > VISIBLE_COUNT;
-  const hidden = players.length - VISIBLE_COUNT;
-  const visible = showAll ? players : players.slice(0, VISIBLE_COUNT);
+  const filtered = useMemo(
+    () =>
+      activePosition === null
+        ? players
+        : players.filter(
+            (player) => (player.teamPosition || player.position) === activePosition,
+          ),
+    [players, activePosition],
+  );
+
+  const selectPosition = (position: string | null) => {
+    setActivePosition(position);
+    setShowAll(false);
+  };
+
+  const hasMore = filtered.length > VISIBLE_COUNT;
+  const hidden = filtered.length - VISIBLE_COUNT;
+  const visible = showAll ? filtered : filtered.slice(0, VISIBLE_COUNT);
 
   return (
     <aside className="panel roster">
       <p>REGISTERED PLAYERS</p>
       <h2>已报名选手 · {players.length}</h2>
       <div className="roster-groups">
+        <button
+          type="button"
+          className={`roster-group${activePosition === null ? " roster-group--active" : ""}`}
+          onClick={() => selectPosition(null)}
+        >
+          全部（{players.length}）
+        </button>
         {POSITION_GROUPS.map(({ key, label }) => (
-          <span key={key} className="roster-group">
+          <button
+            type="button"
+            key={key}
+            className={`roster-group${activePosition === key ? " roster-group--active" : ""}`}
+            onClick={() => selectPosition(activePosition === key ? null : key)}
+          >
             {label}（{counts.get(key) ?? 0}）
-          </span>
+          </button>
         ))}
       </div>
-      {players.length === 0 && <span>暂无选手报名</span>}
-      {visible.map((player) => (
-        <Link key={player.id} href={`/profile?uid=${player.id}`} className="roster-row">
-          <img src={player.avatar || undefined} alt="" />
-          <span>
-            <b>{player.gameName || player.name}</b>
-            <small>{positionText(player.teamPosition || player.position)}</small>
-          </span>
-          <em>
-            <RankLabel rank={player.rank} fallback="未定段" />
-          </em>
-        </Link>
-      ))}
+      {players.length === 0 ? (
+        <span>暂无选手报名</span>
+      ) : filtered.length === 0 ? (
+        <span>该分类暂无选手</span>
+      ) : (
+        visible.map((player) => (
+          <Link key={player.id} href={`/profile?uid=${player.id}`} className="roster-row">
+            <img src={player.avatar || undefined} alt="" />
+            <span>
+              <b>{player.gameName || player.name}</b>
+              <small>{positionText(player.teamPosition || player.position)}</small>
+            </span>
+            <em>
+              <RankLabel rank={player.rank} fallback="未定段" />
+            </em>
+          </Link>
+        ))
+      )}
       {hasMore &&
         (showAll ? (
           <button type="button" className="roster-more" onClick={() => setShowAll(false)}>

@@ -58,13 +58,9 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
   const [liveOpen, setLiveOpen] = useState(false);
   const [pickValues, setPickValues] = useState<{ one?: number; two?: number }>({});
   const [pickOpen, setPickOpen] = useState(false);
-  const [scoreValues, setScoreValues] = useState({
-    roundNo: 1,
-    teamOneId: undefined as number | undefined,
-    teamTwoId: undefined as number | undefined,
-    scoreOne: 0,
-    scoreTwo: 0,
-  });
+  const [scorePairs, setScorePairs] = useState<
+    { teamOneId: number; teamTwoId: number; scoreOne: number; scoreTwo: number }[]
+  >([]);
   const [scoreOpen, setScoreOpen] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(false);
   const [recordsOpen, setRecordsOpen] = useState(false);
@@ -138,6 +134,9 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
     value: team.id,
     label: `${team.name}（${team.player_count} 人）`,
   }));
+
+  const teamNameOf = (id: number | undefined | null) =>
+    board?.teams.find((team) => team.id === id)?.name ?? (id ? `队伍 #${id}` : "");
 
   const filtered = useMemo(
     () => matches.filter((match) => statusFilter === "ALL" || match.status === statusFilter),
@@ -397,6 +396,24 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
               </Button>
               <Button
                 size="small"
+                disabled={!board?.teams.length}
+                onClick={() => {
+                  setScorePairs(
+                    (board?.round_pairs ?? []).map((pair) => ({
+                      teamOneId: pair.team_one,
+                      teamTwoId: pair.team_two,
+                      scoreOne: pair.score_one,
+                      scoreTwo: pair.score_two,
+                    })),
+                  );
+                  setScoreOpen(true);
+                }}
+              >
+                录入本轮战果
+              </Button>
+              <Button
+                size="small"
+                disabled={!board?.has_score}
                 onClick={() =>
                   void run(
                     () => postJson(`/api/admin/match/round/end/${selected.id}`),
@@ -406,22 +423,6 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
                 loading={busy}
               >
                 结束本轮
-              </Button>
-              <Button
-                size="small"
-                disabled={!board?.teams.length}
-                onClick={() => {
-                  setScoreValues({
-                    roundNo: selected.currentRound || 1,
-                    teamOneId: selected.teamOneId ?? undefined,
-                    teamTwoId: selected.teamTwoId ?? undefined,
-                    scoreOne: 0,
-                    scoreTwo: 0,
-                  });
-                  setScoreOpen(true);
-                }}
-              >
-                录入本轮战果
               </Button>
             </Space>
 
@@ -658,23 +659,28 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
         okText="保存"
         cancelText="取消"
         confirmLoading={busy}
+        width={640}
         onCancel={() => setScoreOpen(false)}
         onOk={() => {
           if (!selected) return;
-          if (!scoreValues.teamOneId || !scoreValues.teamTwoId) {
-            message.error("请选择对战的两支队伍");
+          if (!scorePairs.length) {
+            message.error("当前轮次没有可录入的对阵");
             return;
           }
           void run(
             () =>
-              postJson("/api/admin/match/score", {
-                matchId: selected.id,
-                roundNo: scoreValues.roundNo,
-                teamOneId: scoreValues.teamOneId,
-                teamTwoId: scoreValues.teamTwoId,
-                scoreOne: scoreValues.scoreOne,
-                scoreTwo: scoreValues.scoreTwo,
-              }),
+              Promise.all(
+                scorePairs.map((pair) =>
+                  postJson("/api/admin/match/score", {
+                    matchId: selected.id,
+                    roundNo: selected.currentRound || 1,
+                    teamOneId: pair.teamOneId,
+                    teamTwoId: pair.teamTwoId,
+                    scoreOne: pair.scoreOne,
+                    scoreTwo: pair.scoreTwo,
+                  }),
+                ),
+              ).then(() => ({ msg: "战果已保存" })),
             "战果已保存",
           ).then((succeeded) => {
             if (succeeded) setScoreOpen(false);
@@ -682,49 +688,53 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
         }}
       >
         <Space orientation="vertical" size={10} style={{ width: "100%" }}>
-          <span>
-            轮次{" "}
-            <InputNumber
-              min={1}
-              max={99}
-              value={scoreValues.roundNo}
-              onChange={(value) => setScoreValues({ ...scoreValues, roundNo: Number(value) || 1 })}
+          {scorePairs.length ? (
+            scorePairs.map((pair, index) => (
+              <div
+                key={`${pair.teamOneId}-${pair.teamTwoId}`}
+                style={{ display: "flex", alignItems: "center", gap: 8, width: "100%" }}
+              >
+                <span style={{ flex: 1, textAlign: "right" }}>{teamNameOf(pair.teamOneId)}</span>
+                <InputNumber
+                  min={0}
+                  value={pair.scoreOne}
+                  onChange={(value) =>
+                    setScorePairs((prev) =>
+                      prev.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, scoreOne: Number(value) || 0 } : item,
+                      ),
+                    )
+                  }
+                />
+                <span>:</span>
+                <InputNumber
+                  min={0}
+                  value={pair.scoreTwo}
+                  onChange={(value) =>
+                    setScorePairs((prev) =>
+                      prev.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, scoreTwo: Number(value) || 0 } : item,
+                      ),
+                    )
+                  }
+                />
+                <span style={{ flex: 1 }}>{teamNameOf(pair.teamTwoId)}</span>
+              </div>
+            ))
+          ) : (
+            <Alert
+              type="info"
+              showIcon
+              title="当前轮次没有可录入的对阵，请先完成队伍编排并结束选人开赛。"
             />
-          </span>
-          <Space>
-            <Select
-              style={{ width: 200 }}
-              placeholder="蓝队"
-              value={scoreValues.teamOneId}
-              options={teamOptions}
-              onChange={(teamOneId) => setScoreValues({ ...scoreValues, teamOneId })}
-            />
-            <InputNumber
-              min={0}
-              value={scoreValues.scoreOne}
-              onChange={(value) => setScoreValues({ ...scoreValues, scoreOne: Number(value) || 0 })}
-            />
-            <span>:</span>
-            <InputNumber
-              min={0}
-              value={scoreValues.scoreTwo}
-              onChange={(value) => setScoreValues({ ...scoreValues, scoreTwo: Number(value) || 0 })}
-            />
-            <Select
-              style={{ width: 200 }}
-              placeholder="红队"
-              value={scoreValues.teamTwoId}
-              options={teamOptions}
-              onChange={(teamTwoId) => setScoreValues({ ...scoreValues, teamTwoId })}
-            />
-          </Space>
+          )}
         </Space>
       </Modal>
 
       <Drawer
         open={rosterOpen}
         title={`队伍编排 · ${selected?.name ?? ""}`}
-        width={1100}
+        size={1100}
         onClose={() => setRosterOpen(false)}
         destroyOnHidden
       >
@@ -740,7 +750,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
       <Drawer
         open={recordsOpen}
         title={`战绩录入 · ${selected?.name ?? ""}`}
-        width={1100}
+        size={1100}
         onClose={() => setRecordsOpen(false)}
         destroyOnHidden
       >

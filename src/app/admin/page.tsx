@@ -84,7 +84,7 @@ export default function AdminPage() {
             </Col>
             <Col xs={24} md={8}>
               <Card className="antd-panel">
-                <Statistic title="选手总数" value={summary.players} prefix={<TeamOutlined />} />
+                <Statistic title="用户总数" value={summary.players} prefix={<TeamOutlined />} />
               </Card>
             </Col>
             <Col xs={24} md={8}>
