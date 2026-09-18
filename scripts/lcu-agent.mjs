@@ -446,12 +446,31 @@ async function api(pathname, init = {}) {
 
 /** 本站存的是中文英雄称号，champions.json 的 id 就是 Riot 的 championId。 */
 let championById = new Map();
-function loadChampions() {
+
+/** 把 champions.json 的原始数组解析成 id → 中文称号 的映射。 */
+function parseChampions(list) {
+  if (!Array.isArray(list) || !list.length) throw new Error("champions.json 内容为空");
+  return new Map(list.map((item) => [String(item.id), item.name]));
+}
+
+/**
+ * 载入英雄表。优先读脚本旁边的 public/assets/champions.json；
+ * 脚本被单独拷到客户端机器、没带 public 目录时，回退到从站点拉同一份文件。
+ */
+async function loadChampions() {
   try {
     const file = new URL("../public/assets/champions.json", import.meta.url);
-    const list = JSON.parse(readFileSync(file, "utf8"));
-    championById = new Map(list.map((item) => [String(item.id), item.name]));
+    championById = parseChampions(JSON.parse(readFileSync(file, "utf8")));
     log(`已载入英雄表 ${championById.size} 条`);
+    return;
+  } catch (error) {
+    warn("本地 champions.json 不可用，尝试从站点拉取：", String(error));
+  }
+  try {
+    const response = await fetch(`${API_BASE}/assets/champions.json`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    championById = parseChampions(await response.json());
+    log(`已从站点载入英雄表 ${championById.size} 条`);
   } catch (error) {
     warn("载入 champions.json 失败，将直接把 championId 当英雄名上传：", String(error));
   }
@@ -1132,7 +1151,7 @@ async function startLocalUi() {
 
 async function main() {
   log(`目标站点 ${API_BASE}${DRY_RUN ? "（dry-run，不会真的写入）" : ""}`);
-  loadChampions();
+  await loadChampions();
   log(
     `导入策略：${QUEUES.length ? `只收 queueId ${QUEUES.join("/")}` : "不限队列"}，` +
       `一局至少 ${MIN_PLAYERS} 名本站选手。`,

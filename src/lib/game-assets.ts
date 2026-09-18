@@ -40,6 +40,9 @@ for (const champion of champions) {
   }
 }
 
+const championById = new Map<string, ChampionAsset>();
+for (const champion of champions) championById.set(String(champion.id), champion);
+
 const itemById = new Map<string, ItemAsset>();
 const itemByName = new Map<string, ItemAsset>();
 for (const item of items) {
@@ -118,6 +121,13 @@ export const championChoices: ChampionChoice[] = champions.reduce<ChampionChoice
 /** 把英雄名（称号 / 英雄名 / 英文别名都认）统一成落库用的中文称号。 */
 export function canonicalChampionName(name: string | null | undefined) {
   return championAsset(name)?.name ?? (name ?? "").trim();
+}
+
+/** 按 Riot championId（如 "75"）查中文称号；查不到返回空串。 */
+export function championNameById(id: string | number | null | undefined) {
+  const key = String(id ?? "").trim();
+  if (!key) return "";
+  return championById.get(key)?.name ?? "";
 }
 
 /** 装备输入框的联想列表。 */

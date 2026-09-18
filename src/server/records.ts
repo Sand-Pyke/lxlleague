@@ -2,6 +2,7 @@ import type { MatchGameRecord, PlayerProfile, User } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { parseFavoriteHeroes } from "@/lib/favorite-heroes";
+import { championNameById } from "@/lib/game-assets";
 import { ApiError } from "@/server/api";
 import { coreAdminUsername } from "@/server/auth";
 import { assertCanManageUser } from "@/server/permissions";
@@ -210,8 +211,13 @@ export type ImportedRow = {
 export function normalizeImportedRow(raw: unknown): ImportedRow | null {
   const row = (raw ?? {}) as Record<string, unknown>;
   const userId = asInt(row.user_id ?? row.userId);
-  const champion = String(row.champion ?? "").trim();
-  if (!userId || !champion) return null;
+  const championInput = String(row.champion ?? "").trim();
+  if (!userId || !championInput) return null;
+  // agent 拿不到英雄表时会把 Riot championId（纯数字）当英雄名传过来，
+  // 这里统一解析成中文称号，避免战绩里出现「75」这类数字。
+  const champion = /^\d{1,4}$/.test(championInput)
+    ? championNameById(championInput) || championInput
+    : championInput;
   return {
     userId,
     champion: champion.slice(0, 50),
