@@ -1414,6 +1414,27 @@ a {
   font-size: 12px;
   color: var(--muted);
 }
+.result-hero .champion {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 16px;
+}
+.result-hero .champion small {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #fbbf24;
+}
+.result-hero .champion b {
+  font-size: 30px;
+  color: #fbbf24;
+}
+.result-hero .round-state {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
 .game-tabs {
   display: flex;
   gap: 8px;
@@ -1592,6 +1613,20 @@ a {
 .pair-head span {
   font-size: 20px;
   font-weight: 800;
+}
+.pair-head .pair-score {
+  font-size: 20px;
+  font-weight: 800;
+  color: #e2e8f0;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.pair-head .pair-score:hover {
+  color: #a78bfa;
+}
+.pair-card.active {
+  border-color: #7c3aed;
+  box-shadow: 0 0 18px rgba(124, 58, 237, 0.35);
 }
 .schedule {
   margin-top: 16px;

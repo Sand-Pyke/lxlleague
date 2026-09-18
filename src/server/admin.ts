@@ -136,7 +136,7 @@ export async function deleteMatch(matchId: number) {
 /** 后台分队看板：队伍 + 每队已用费用 + 报名列表（含段位费用）。 */
 export async function teamsBoard(matchId: number) {
   const match = await requireMatch(matchId);
-  const [teams, signs, scores] = await Promise.all([
+  const [teams, signs, scores, frozenRounds] = await Promise.all([
     prisma.team.findMany({ where: { matchId }, orderBy: { id: "asc" } }),
     prisma.matchSignup.findMany({
       where: { matchId },
@@ -161,6 +161,10 @@ export async function teamsBoard(matchId: number) {
       where: { matchId, roundNo: match.currentRound || 1 },
       select: { teamOneId: true, teamTwoId: true, scoreOne: true, scoreTwo: true },
     }),
+    prisma.matchRound.findMany({
+      where: { matchId, roundNo: match.currentRound || 1 },
+      orderBy: { id: "asc" },
+    }),
   ]);
 
   const useFee = Boolean(match.useFee);
@@ -171,10 +175,11 @@ export async function teamsBoard(matchId: number) {
   }
 
   // 当前轮的所有对阵（可能同时有多组对战），以及每组是否已录入比分。
+  // 第 1 轮之后优先读取已固化的 MatchRound（胜者晋级后的对阵），否则现场生成。
   const roundNo = match.currentRound || 1;
-  const roundPairs = pairTeams(match, teams).filter(
-    (pair): pair is [number, number] => pair[1] !== null,
-  );
+  const roundPairs: [number, number][] = frozenRounds.length
+    ? frozenRounds.map((row) => [row.teamOneId, row.teamTwoId])
+    : pairTeams(match, teams).filter((pair): pair is [number, number] => pair[1] !== null);
   const scoreOf = (teamOneId: number, teamTwoId: number) => {
     const direct = scores.find(
       (score) => score.teamOneId === teamOneId && score.teamTwoId === teamTwoId,

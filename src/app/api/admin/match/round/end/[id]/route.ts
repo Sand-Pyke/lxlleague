@@ -5,6 +5,13 @@ import { endRound } from "@/server/roster";
 export const dynamic = "force-dynamic";
 
 export const POST = adminRoute<{ id: string }>(async ({ params }) => {
-  const { roundNo } = assertOk(await endRound(requiredId(params.id)));
-  return { msg: `第${roundNo}轮已结束，赛程已更新，可开始第${roundNo + 1}轮`, roundNo };
+  const outcome = assertOk(await endRound(requiredId(params.id)));
+  if (outcome.finished) {
+    return { msg: `决赛结束，第${outcome.roundNo}轮战果已固化，赛事圆满收官！`, roundNo: outcome.roundNo, finished: true };
+  }
+  return {
+    msg: `第${outcome.roundNo}轮已结束，胜者已晋级第${outcome.roundNo + 1}轮`,
+    roundNo: outcome.roundNo,
+    finished: false,
+  };
 });

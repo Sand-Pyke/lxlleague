@@ -12,7 +12,16 @@ import {
   signupForMatch,
   type SignupOptions,
 } from "@/lib/repository";
-import { POSITIONS, isPosition, pairTeams, resolveScore, scoreMap, type Position } from "@/server/roster";
+import {
+  POSITIONS,
+  isBracketTeamCount,
+  isPosition,
+  pairTeams,
+  resolveScore,
+  scoreMap,
+  totalRoundsFor,
+  type Position,
+} from "@/server/roster";
 
 const notFound = () => NextResponse.json({ error: "赛事不存在" }, { status: 404 });
 
@@ -282,76 +291,199 @@ export async function getMatchRounds(id: string | number) {
   return NextResponse.json(outcome.data);
 }
 
-/** 赛果页数据：按小局归集战绩。 */
-export async function getMatchResultData(id: string | number) {
+/** 赛果页查询参数：查看指定轮次的某组对阵。 */
+export type MatchResultOptions = {
+  round?: number | null;
+  teamOneId?: number | null;
+  teamTwoId?: number | null;
+};
+
+/**
+ * 赛果页数据（单败淘汰）：
+ * 轮次 → 该轮多组对阵（每组系列比分）→ 点击某组查看该组逐局明细。
+ */
+export async function getMatchResultData(id: string | number, options: MatchResultOptions = {}) {
   const matchId = validId(id);
   if (!matchId) return { kind: "missing" as const, reason: "match" as const };
-  const match = await getMatchById(matchId);
+  const { match, teams, signs, rounds, scores, records } = await loadMatchBundle(matchId);
   if (!match) return { kind: "missing" as const, reason: "match" as const };
 
-  const [records, players, teams] = await Promise.all([
-    prisma.matchGameRecord.findMany({
-      where: { matchId },
-      orderBy: [{ gameNo: "asc" }, { id: "asc" }],
-      include: { user: { select: { username: true, profile: { select: { avatar: true, rank: true } } } } },
-    }),
-    getMatchPlayers(matchId),
-    prisma.team.findMany({ where: { matchId }, select: { id: true, name: true } }),
-  ]);
+  const players = await getMatchPlayers(matchId);
 
+  const teamCount = teams.length;
+  const currentRound = match.currentRound || 1;
+  const totalRounds = isBracketTeamCount(teamCount)
+    ? totalRoundsFor(teamCount)
+    : Math.max(1, currentRound, ...rounds.map((row) => row.roundNo));
+  // 历史脏数据可能把 currentRound 推到总轮数之外，展示时收敛到总轮数。
+  const liveRound = Math.min(currentRound, totalRounds);
+
+  // 每组对阵（第 1 轮未固化时现场生成），按轮次归集。
+  const byRound = new Map<number, [number, number][]>();
+  for (const row of rounds) {
+    const bucket = byRound.get(row.roundNo) ?? [];
+    bucket.push([row.teamOneId, row.teamTwoId]);
+    byRound.set(row.roundNo, bucket);
+  }
+  if (!byRound.has(liveRound)) {
+    const pending = pairTeams(match, teams).filter(
+      (pair): pair is [number, number] => pair[1] !== null,
+    );
+    if (pending.length) byRound.set(liveRound, pending);
+  }
+
+  const tmMap = new Map(teams.map((team) => [team.id, team.name]));
+  const map = scoreMap(scores);
+
+  // 轮次列表：1..totalRounds，并包含所有已固化轮次。
+  const roundNumbers = new Set<number>(byRound.keys());
+  for (let roundNo = 1; roundNo <= totalRounds; roundNo++) roundNumbers.add(roundNo);
+  const sortedRounds = [...roundNumbers].sort((a, b) => a - b);
+
+  const requestedRound = options.round ?? liveRound;
+  const selectedRound = sortedRounds.includes(requestedRound)
+    ? requestedRound
+    : (sortedRounds[sortedRounds.length - 1] ?? liveRound);
+
+  const hasManual = (roundNo: number, teamOneId: number, teamTwoId: number) =>
+    scores.some(
+      (score) =>
+        score.roundNo === roundNo &&
+        ((score.teamOneId === teamOneId && score.teamTwoId === teamTwoId) ||
+          (score.teamOneId === teamTwoId && score.teamTwoId === teamOneId)),
+    );
+
+  // 系列比分为手动录入；records 传空，避免回退到逐局统计。
+  const manualScore = (roundNo: number, teamOneId: number, teamTwoId: number) =>
+    resolveScore(map, roundNo, teamOneId, teamTwoId, [], new Map<number, number>());
+
+  const isSamePair = (x: number, y: number, a: number, b: number) =>
+    (x === a && y === b) || (x === b && y === a);
+
+  const roundPairs = byRound.get(selectedRound) ?? [];
+  const requestedPair =
+    options.teamOneId != null && options.teamTwoId != null
+      ? ([options.teamOneId, options.teamTwoId] as [number, number])
+      : null;
+  const selectedPair =
+    (requestedPair
+      ? roundPairs.find(([x, y]) => isSamePair(x, y, requestedPair[0], requestedPair[1])) ?? null
+      : null) ?? roundPairs[0] ?? null;
+
+  const pairs = roundPairs.map(([teamOneId, teamTwoId]) => {
+    const score = manualScore(selectedRound, teamOneId, teamTwoId);
+    return {
+      team_one_id: teamOneId,
+      team_two_id: teamTwoId,
+      team1: tmMap.get(teamOneId) ?? "待定",
+      team2: tmMap.get(teamTwoId) ?? "待定",
+      score: [score[0], score[1]] as [number, number],
+      has_score: hasManual(selectedRound, teamOneId, teamTwoId),
+      selected: selectedPair ? isSamePair(teamOneId, teamTwoId, selectedPair[0], selectedPair[1]) : false,
+    };
+  });
+
+  // 冠军：赛事结束 → 最后一轮（决赛）唯一对阵的胜者。
+  let championTeamId: number | null = null;
+  if (match.status === "FINISHED") {
+    const finalPairs = byRound.get(totalRounds) ?? [];
+    if (finalPairs.length === 1) {
+      const [t1, t2] = finalPairs[0];
+      const userTeam = new Map<number, number>();
+      for (const sign of signs) if (sign.teamId) userTeam.set(sign.userId, sign.teamId);
+      const [s1, s2] = resolveScore(
+        map,
+        totalRounds,
+        t1,
+        t2,
+        records.filter((record) => (record.roundNo || 1) === totalRounds),
+        userTeam,
+      );
+      if (s1 !== s2) championTeamId = s1 > s2 ? t1 : t2;
+    }
+  }
+
+  // 选中对阵的逐局明细（按小局归集，限定该轮与该两组）。
   const slotMap = new Map(players.map((player) => [player.id, player]));
   const teamNames = new Map(teams.map((team) => [team.id, team.name]));
 
   const games = new Map<number, typeof records>();
-  for (const record of records) {
-    const bucket = games.get(record.gameNo) ?? [];
-    bucket.push(record);
-    games.set(record.gameNo, bucket);
+  if (selectedPair) {
+    const [t1, t2] = selectedPair;
+    for (const record of records) {
+      if ((record.roundNo || 1) !== selectedRound) continue;
+      if (record.teamId !== t1 && record.teamId !== t2) continue;
+      const bucket = games.get(record.gameNo) ?? [];
+      bucket.push(record);
+      games.set(record.gameNo, bucket);
+    }
   }
 
   return {
     kind: "ok" as const,
     data: {
-      match,
-      players,
-      games: [...games.entries()].map(([gameNo, rows]) => ({
-        game_no: gameNo,
-        round_no: rows[0].roundNo,
-        rows: rows.map((record) => {
-          const slot = slotMap.get(record.userId);
-          const teamId = record.teamId ?? slot?.teamId ?? null;
-          return {
-            id: record.id,
-            user_id: record.userId,
-            username: record.user?.username ?? "",
-            display_name: slot?.name ?? record.user?.username ?? "",
-            avatar: record.user?.profile?.avatar ?? "",
-            rank: record.user?.profile?.rank ?? "",
-            champion: record.champion,
-            result: record.result,
-            kills: record.kills,
-            deaths: record.deaths,
-            assists: record.assists,
-            is_mvp: record.isMvp,
-            is_svp: record.isSvp,
-            team_rank: record.teamRank,
-            team_pos: slot?.teamPosition || "无",
-            team_name: teamId ? (teamNames.get(teamId) ?? "") : "",
-            level: record.level,
-            cs: record.cs,
-            gold: record.gold,
-            vision: record.vision,
-            items: record.items ? record.items.split(",").filter(Boolean) : [],
-          };
-        }),
-      })),
+      match: {
+        id: match.id,
+        name: match.name,
+        date: match.date.toISOString(),
+        status: match.status,
+        bo: match.bo || "BO1",
+        current_round: liveRound,
+        total_rounds: totalRounds,
+        champion_team_id: championTeamId,
+        champion_name: championTeamId ? (tmMap.get(championTeamId) ?? "冠军") : "",
+      },
+      rounds: sortedRounds,
+      selected_round: selectedRound,
+      pairs,
+      selected_pair: selectedPair
+        ? {
+            team_one_id: selectedPair[0],
+            team_two_id: selectedPair[1],
+            team1: tmMap.get(selectedPair[0]) ?? "待定",
+            team2: tmMap.get(selectedPair[1]) ?? "待定",
+          }
+        : null,
+      games: [...games.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([gameNo, rows]) => ({
+          game_no: gameNo,
+          round_no: rows[0].roundNo,
+          rows: rows.map((record) => {
+            const slot = slotMap.get(record.userId);
+            const teamId = record.teamId ?? slot?.teamId ?? null;
+            return {
+              id: record.id,
+              user_id: record.userId,
+              username: slot?.username ?? "",
+              display_name: slot?.name ?? slot?.username ?? "",
+              avatar: slot?.avatar ?? "",
+              rank: slot?.rank ?? "",
+              champion: record.champion,
+              result: record.result,
+              kills: record.kills,
+              deaths: record.deaths,
+              assists: record.assists,
+              is_mvp: record.isMvp,
+              is_svp: record.isSvp,
+              team_rank: record.teamRank,
+              team_pos: slot?.teamPosition || "无",
+              team_name: teamId ? (teamNames.get(teamId) ?? "") : "",
+              level: record.level,
+              cs: record.cs,
+              gold: record.gold,
+              vision: record.vision,
+              items: record.items ? record.items.split(",").filter(Boolean) : [],
+            };
+          }),
+        })),
     },
   };
 }
 
 /** 赛果页路由。 */
-export async function getMatchResult(id: string | number) {
-  const outcome = await getMatchResultData(id);
+export async function getMatchResult(id: string | number, options: MatchResultOptions = {}) {
+  const outcome = await getMatchResultData(id, options);
   if (outcome.kind !== "ok") return lookupError(outcome.reason);
   return NextResponse.json(outcome.data);
 }

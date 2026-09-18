@@ -57,7 +57,16 @@ export default async function Lineup({
             <div className="pair-head">
               <b>{pair.team1.name}</b>
               <span>
-                {pair.score[0]} : {pair.score[1]}
+                {pair.team2.id ? (
+                  <Link
+                    className="pair-score"
+                    href={`/matches/${id}/result?round=${shown}&t1=${pair.team1.id}&t2=${pair.team2.id}`}
+                  >
+                    {pair.score[0]} : {pair.score[1]}
+                  </Link>
+                ) : (
+                  `${pair.score[0]} : ${pair.score[1]}`
+                )}
               </span>
               <b>{pair.team2.name}</b>
             </div>

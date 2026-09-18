@@ -140,36 +140,98 @@ export function resolveScore(
   return teamScore(records, userTeam, teamOneId, teamTwoId);
 }
 
-/** 固化当前对战组合到赛程（重复执行同一轮 = 覆盖重做），并推进 currentRound。 */
+/** 单败淘汰允许的队伍数：2/4/8/16/32。 */
+const VALID_TEAM_COUNTS = [2, 4, 8, 16, 32];
+
+export function isBracketTeamCount(count: number) {
+  return VALID_TEAM_COUNTS.includes(count);
+}
+
+/** 单败淘汰总轮数 = log2(队伍数)，最少 1 轮。 */
+export function totalRoundsFor(teamCount: number) {
+  return Math.max(1, Math.round(Math.log2(Math.max(teamCount, 2))));
+}
+
+/**
+ * 结束本轮：校验本轮全部对阵都已录入系列比分且分出胜负，固化本轮对阵，
+ * 并把各组胜者按顺序配对成下一轮；只剩一组（决赛）时判定冠军并结束赛事。
+ */
 export async function endRound(matchId: number) {
   const match = await prisma.match.findUnique({ where: { id: matchId } });
   if (!match) return { kind: "not_found" as const };
+  if (match.status === "FINISHED") return { kind: "already_finished" as const };
+
   const teams = await prisma.team.findMany({ where: { matchId }, orderBy: { id: "asc" } });
-  const pairs = pairTeams(match, teams).filter((pair): pair is [number, number] => pair[1] !== null);
-  if (!pairs.length) return { kind: "empty" as const };
+  if (!isBracketTeamCount(teams.length)) return { kind: "bad_team_count" as const };
 
   const roundNo = match.currentRound || 1;
-  const scores = await prisma.matchScore.findMany({
+  if (roundNo > totalRoundsFor(teams.length)) return { kind: "already_finished" as const };
+
+  // 当前轮对阵：优先用已固化的 MatchRound；第 1 轮未固化时按队伍顺序现场生成。
+  const frozen = await prisma.matchRound.findMany({
     where: { matchId, roundNo },
-    select: { teamOneId: true, teamTwoId: true },
+    orderBy: { id: "asc" },
   });
-  const hasScoreFor = (teamOneId: number, teamTwoId: number) =>
-    scores.some(
-      (score) =>
-        (score.teamOneId === teamOneId && score.teamTwoId === teamTwoId) ||
-        (score.teamOneId === teamTwoId && score.teamTwoId === teamOneId),
-    );
-  if (!pairs.every(([teamOneId, teamTwoId]) => hasScoreFor(teamOneId, teamTwoId))) {
-    return { kind: "no_score" as const };
+  const pairs: [number, number][] = frozen.length
+    ? frozen.map((row) => [row.teamOneId, row.teamTwoId] as [number, number])
+    : (pairTeams(match, teams).filter((pair): pair is [number, number] => pair[1] !== null));
+  if (!pairs.length) return { kind: "empty" as const };
+
+  const map = scoreMap(
+    await prisma.matchScore.findMany({
+      where: { matchId, roundNo },
+      select: { roundNo: true, teamOneId: true, teamTwoId: true, scoreOne: true, scoreTwo: true },
+    }),
+  );
+
+  const winners: number[] = [];
+  for (const [teamOneId, teamTwoId] of pairs) {
+    const direct = map.get(scoreKey(roundNo, teamOneId, teamTwoId));
+    const swapped = map.get(scoreKey(roundNo, teamTwoId, teamOneId));
+    let scoreOne: number;
+    let scoreTwo: number;
+    if (direct) {
+      scoreOne = direct[0];
+      scoreTwo = direct[1];
+    } else if (swapped) {
+      scoreOne = swapped[1];
+      scoreTwo = swapped[0];
+    } else {
+      return { kind: "no_score" as const };
+    }
+    if (scoreOne === scoreTwo) return { kind: "tie" as const };
+    winners.push(scoreOne > scoreTwo ? teamOneId : teamTwoId);
+  }
+
+  const freezePairs = prisma.matchRound.deleteMany({ where: { matchId, roundNo } });
+  const savePairs = prisma.matchRound.createMany({
+    data: pairs.map(([teamOneId, teamTwoId]) => ({ matchId, roundNo, teamOneId, teamTwoId })),
+  });
+
+  if (pairs.length === 1) {
+    // 决赛：冠军出炉，赛事结束。
+    await prisma.$transaction([
+      freezePairs,
+      savePairs,
+      prisma.match.update({ where: { id: matchId }, data: { status: "FINISHED" } }),
+    ]);
+    return { kind: "ok" as const, roundNo, finished: true, championTeamId: winners[0] };
+  }
+
+  // 半决赛及之前：胜者按顺序两两配对成下一轮。
+  const nextRound = roundNo + 1;
+  const nextPairs = [];
+  for (let index = 0; index < winners.length; index += 2) {
+    nextPairs.push({ matchId, roundNo: nextRound, teamOneId: winners[index], teamTwoId: winners[index + 1] });
   }
   await prisma.$transaction([
-    prisma.matchRound.deleteMany({ where: { matchId, roundNo } }),
-    prisma.matchRound.createMany({
-      data: pairs.map(([teamOneId, teamTwoId]) => ({ matchId, roundNo, teamOneId, teamTwoId })),
-    }),
-    prisma.match.update({ where: { id: matchId }, data: { currentRound: roundNo + 1 } }),
+    freezePairs,
+    savePairs,
+    prisma.matchRound.deleteMany({ where: { matchId, roundNo: nextRound } }),
+    prisma.matchRound.createMany({ data: nextPairs }),
+    prisma.match.update({ where: { id: matchId }, data: { currentRound: nextRound } }),
   ]);
-  return { kind: "ok" as const, roundNo };
+  return { kind: "ok" as const, roundNo, finished: false, championTeamId: null };
 }
 
 /** 手动设置某轮对战战果（几比几）。 */
