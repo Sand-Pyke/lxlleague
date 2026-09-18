@@ -397,6 +397,48 @@ a {
   color: var(--league-muted);
 }
 
+/* 「最近赛果」卡内的结果列表：一行一场，左赛事名/轮次，右比分。 */
+.recent-results {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  gap: 4px;
+}
+.recent-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+.recent-result:last-child {
+  border-bottom: 0;
+}
+.recent-result-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.recent-result-name b {
+  font-size: 13px;
+  color: var(--league-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recent-result-name small {
+  font-size: 12px;
+  color: var(--league-muted);
+}
+.recent-result-score {
+  font-size: 13px;
+  color: var(--league-text);
+  white-space: nowrap;
+}
+
 /* 单列堆叠时取消强制等高，否则每张卡片都会被拉到最高那张的高度。 */
 @media (max-width: 760px) {
   .home-board {

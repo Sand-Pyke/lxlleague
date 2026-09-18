@@ -61,3 +61,16 @@ export type Match = {
   teamOneId: number | null;
   teamTwoId: number | null;
 };
+
+/** 首页「最近赛果」：一场赛事最新一轮的对阵比分。 */
+export type RecentResult = {
+  id: number;
+  name: string;
+  status: "CREATED" | "LIVE" | "FINISHED";
+  round_no: number;
+  pairs: Array<{
+    team1: string;
+    team2: string;
+    score: [number, number];
+  }>;
+};

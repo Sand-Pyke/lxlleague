@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowRightOutlined,
   PlayCircleOutlined,
   TrophyOutlined,
   UsergroupAddOutlined,
@@ -9,13 +8,13 @@ import {
 import { Button, Card, Col, Empty, Row, Space, Statistic, Typography } from "antd";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { LeagueShell, Status } from "@/components/app-shell";
+import { LeagueShell } from "@/components/app-shell";
 import { MatchCardBody, matchDestination } from "@/components/match-card";
 import { RankLabel } from "@/components/rank-label";
 import { positionText } from "@/lib/admin-options";
-import type { Match, Player } from "@/lib/data";
+import type { Match, Player, RecentResult } from "@/lib/data";
 
-type Props = { matches: Match[]; players: Player[] };
+type Props = { matches: Match[]; players: Player[]; recent: RecentResult[] };
 
 /**
  * 首页四块面板共用的外壳。四张卡片结构一致，配合 .home-board 的等分行高即为等大。
@@ -66,7 +65,7 @@ function RankRows({
   );
 }
 
-export function HomeDashboard({ matches, players }: Props) {
+export function HomeDashboard({ matches, players, recent }: Props) {
   // 榜单只列「有成绩」的选手，避免出现一整行 0 胜率 / 0 次 MVP 的空数据：
   // - 选手排行：积分 > 0（积分公式里全败也是 0 分，与 /rankings 完整榜单口径一致）；
   // - MVP 榜：真的拿过 MVP（mvp > 0），否则整榜都是「0 次 MVP」，没有意义。
@@ -78,7 +77,6 @@ export function HomeDashboard({ matches, players }: Props) {
     .filter((player) => player.mvp > 0)
     .sort((a, b) => b.mvp - a.mvp || b.points - a.points)
     .slice(0, 5);
-  const recentMatch = matches.find((match) => match.status === "FINISHED");
   // 「今日赛事」最多放两场：进行中的优先，其余按时间升序；其余赛事走「查看全部」。
   const featuredMatches = matches
     .filter((match) => match.status !== "FINISHED")
@@ -179,21 +177,30 @@ export function HomeDashboard({ matches, players }: Props) {
           )}
         </HomePanel>
 
-        <HomePanel title="最近赛果">
-          {recentMatch ? (
-            <>
-              <Typography.Title level={4}>{recentMatch.name}</Typography.Title>
-              <div className="result-note">
-                <Status status="FINISHED" /> {recentMatch.round}
-              </div>
-              <Link href={`/matches/${recentMatch.id}/result`}>
-                <Button type="link" icon={<ArrowRightOutlined />} iconPlacement="end">
-                  查看本场数据
-                </Button>
-              </Link>
-            </>
+        <HomePanel title="最近赛果" extra={<Link href="/matches?tab=history">查看全部</Link>}>
+          {recent.length ? (
+            <div className="recent-results">
+              {recent.map((item) => (
+                <Link className="recent-result" href={`/matches/${item.id}/result`} key={item.id}>
+                  <span className="recent-result-name">
+                    <b>{item.name}</b>
+                    <small>
+                      第 {item.round_no} 轮 · {item.status === "FINISHED" ? "已结束" : "进行中"}
+                    </small>
+                  </span>
+                  <span className="recent-result-score">
+                    {item.pairs.map((pair, index) => (
+                      <span key={`${pair.team1}-${pair.team2}`}>
+                        {pair.team1} {pair.score[0]} : {pair.score[1]} {pair.team2}
+                        {index < item.pairs.length - 1 ? " · " : ""}
+                      </span>
+                    ))}
+                  </span>
+                </Link>
+              ))}
+            </div>
           ) : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无已结束赛事" />
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无赛果数据" />
           )}
         </HomePanel>
       </div>

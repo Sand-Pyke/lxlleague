@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import type { RecentResult } from "@/lib/data";
 import { championCount, listPlayerCards, recentResults, type PlayerCard } from "@/server/records";
 import { pairTeams, rankFee, signRank } from "@/server/roster";
 
@@ -197,4 +198,51 @@ export async function getHomeBoardV2() {
     total_player: players.length,
     total_champion: players.filter((player) => player.teamChampion > 0).length,
   });
+}
+
+/**
+ * 首页「最近赛果」：取最近几场**已经录入过比分**的赛事，展示其最新一轮的对阵比分。
+ * 不再只认 FINISHED——进行中的赛事只要某轮比分已经录入，同样算作“赛果”。
+ */
+export async function homeRecentResults(limit = 5): Promise<RecentResult[]> {
+  const matches = await prisma.match.findMany({
+    orderBy: [{ date: "desc" }, { id: "desc" }],
+    take: limit,
+  });
+  if (!matches.length) return [];
+
+  const matchIds = matches.map((match) => match.id);
+  const [teams, scores] = await Promise.all([
+    prisma.team.findMany({ where: { matchId: { in: matchIds } } }),
+    prisma.matchScore.findMany({ where: { matchId: { in: matchIds } } }),
+  ]);
+
+  const teamNames = new Map(teams.map((team) => [team.id, team.name]));
+  const scoresByMatch = new Map<number, typeof scores>();
+  for (const score of scores) {
+    const bucket = scoresByMatch.get(score.matchId) ?? [];
+    bucket.push(score);
+    scoresByMatch.set(score.matchId, bucket);
+  }
+
+  const results: RecentResult[] = [];
+  for (const match of matches) {
+    const rows = scoresByMatch.get(match.id);
+    if (!rows?.length) continue;
+    const roundNo = Math.max(...rows.map((row) => row.roundNo));
+    results.push({
+      id: match.id,
+      name: match.name,
+      status: match.status,
+      round_no: roundNo,
+      pairs: rows
+        .filter((row) => row.roundNo === roundNo)
+        .map((row) => ({
+          team1: teamNames.get(row.teamOneId) ?? "待定",
+          team2: teamNames.get(row.teamTwoId) ?? "待定",
+          score: [row.scoreOne, row.scoreTwo] as [number, number],
+        })),
+    });
+  }
+  return results;
 }
