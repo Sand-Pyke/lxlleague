@@ -13,6 +13,7 @@ import {
   Card,
   Empty,
   Input,
+  InputNumber,
   Modal,
   Popconfirm,
   Segmented,
@@ -110,6 +111,13 @@ export function RosterPanel({ board, loading, onReload }: Props) {
   const [poolKeyword, setPoolKeyword] = useState("");
   // 选人顺序：默认按已用费用升序，点「重新生成」时同费用随机（与旧后台一致）。
   const [pickOrder, setPickOrder] = useState<number[]>([]);
+  // 预算不足时的临时调额弹窗（记录被拦截的选手与队内已用费用）。
+  const [budgetBlock, setBudgetBlock] = useState<{
+    signId: number;
+    used: number;
+    fee: number;
+  } | null>(null);
+  const [overrideBudget, setOverrideBudget] = useState<number>(0);
 
   const { teams, signs, budget, match } = board;
   const unassigned = useMemo(() => signs.filter((sign) => !sign.team_id), [signs]);
@@ -193,16 +201,37 @@ export function RosterPanel({ board, loading, onReload }: Props) {
     }
   }
 
-  const assign = (signId: number) =>
+  const assign = (signId: number, overrideBudget?: number) =>
     run(
       () =>
         postJson("/api/admin/team/assign", {
           signId,
           teamId: pendingTeam[signId] ?? null,
           teamPosition: pendingPos[signId] ?? null,
+          overrideBudget,
         }),
       "分配成功",
     );
+
+  /** 点「分配」时先做本地预算检查，不足则弹出临时调额确认框。 */
+  const requestAssign = (signId: number) => {
+    if (!match.use_fee || !budget) {
+      void assign(signId);
+      return;
+    }
+    const sign = signs.find((item) => item.id === signId);
+    const team = teams.find((item) => item.id === pendingTeam[signId]);
+    if (!sign || !team) {
+      void assign(signId);
+      return;
+    }
+    if (team.used_fee + sign.fee <= budget) {
+      void assign(signId);
+      return;
+    }
+    setBudgetBlock({ signId, used: team.used_fee, fee: sign.fee });
+    setOverrideBudget(team.used_fee + sign.fee);
+  };
 
   function TeamCard({ team, pickIndex }: { team: RosterTeam; pickIndex: number }) {
     const members = signs
@@ -521,7 +550,7 @@ export function RosterPanel({ board, loading, onReload }: Props) {
                         type="primary"
                         disabled={!targetTeam}
                         loading={busy}
-                        onClick={() => void assign(sign.id)}
+                        onClick={() => void requestAssign(sign.id)}
                       >
                         分配
                       </Button>
@@ -562,6 +591,38 @@ export function RosterPanel({ board, loading, onReload }: Props) {
           placeholder="队伍名，例如「蓝队」"
           onChange={(event) => setNewTeamName(event.target.value)}
         />
+      </Modal>
+
+      <Modal
+        open={Boolean(budgetBlock)}
+        title="预算不足"
+        okText="临时调整预算并分配"
+        cancelText="取消"
+        okButtonProps={{
+          disabled:
+            overrideBudget < (budgetBlock?.used ?? 0) + (budgetBlock?.fee ?? 0),
+        }}
+        onCancel={() => setBudgetBlock(null)}
+        onOk={() => {
+          if (!budgetBlock) return;
+          void assign(budgetBlock.signId, overrideBudget).then(() => setBudgetBlock(null));
+        }}
+      >
+        <Typography.Paragraph>
+          该队已用 {budgetBlock?.used}/{budget}，该选手费用 {budgetBlock?.fee}，超出当前单队预算。
+        </Typography.Paragraph>
+        <Typography.Paragraph type="secondary">
+          可输入一个临时预算让该选手加入，仅对本次分配生效，不会改变动态预算计算。
+        </Typography.Paragraph>
+        <Space align="center">
+          <Typography.Text>临时预算</Typography.Text>
+          <InputNumber
+            min={1}
+            style={{ width: 160 }}
+            value={overrideBudget}
+            onChange={(value) => setOverrideBudget(Number(value ?? 0))}
+          />
+        </Space>
       </Modal>
     </Space>
   );

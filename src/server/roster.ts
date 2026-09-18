@@ -333,6 +333,8 @@ export async function assignSignup(input: {
   signId: number;
   teamId: number | null;
   teamPosition: string | null;
+  /** 临时预算覆盖（仅本次分配生效）：预算不足时由管理员临时调额后传入。 */
+  overrideBudget?: number;
 }) {
   const { signId, teamId } = input;
   const sign = await prisma.matchSignup.findUnique({
@@ -361,7 +363,10 @@ export async function assignSignup(input: {
   }
 
   if (match.useFee) {
-    const budget = await matchBudget(sign.matchId);
+    const budget =
+      typeof input.overrideBudget === "number" && input.overrideBudget > 0
+        ? input.overrideBudget
+        : await matchBudget(sign.matchId);
     const teammates = await prisma.matchSignup.findMany({
       where: { teamId, id: { not: signId } },
       include: { user: { include: { profile: { select: { rank: true } } } } },

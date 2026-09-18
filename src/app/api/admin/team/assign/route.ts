@@ -11,12 +11,18 @@ export const POST = adminRoute(async ({ body }) => {
       ? null
       : requiredId(body.teamId);
 
+  const overrideBudget =
+    typeof body.overrideBudget === "number" && Number.isFinite(body.overrideBudget) && body.overrideBudget > 0
+      ? body.overrideBudget
+      : undefined;
+
   return unwrap(
     await assignSignup({
       signId: requiredId(body.signId),
       teamId,
       teamPosition:
         typeof body.teamPosition === "string" && body.teamPosition ? body.teamPosition : null,
+      overrideBudget,
     }),
     teamId === null ? "已移回未分配" : "分配成功",
   );

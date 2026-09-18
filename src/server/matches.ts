@@ -138,7 +138,7 @@ export async function getMatchDetail(request: NextRequest, id: string | number) 
 
 function lineupRows(
   signs: { userId: number; displayName: string; teamId: number | null; teamPosition: string }[],
-  ranks: Map<number, { rank: string; avatar: string; name: string }>,
+  ranks: Map<number, { rank: string; avatar: string; name: string; gameName: string }>,
   teamId: number | null,
 ) {
   const members = teamId ? signs.filter((sign) => sign.teamId === teamId) : [];
@@ -148,7 +148,8 @@ function lineupRows(
     const profile = ranks.get(sign.userId);
     return {
       pos: position,
-      name: sign.displayName || profile?.name || "",
+      // 对战预览优先展示游戏ID（召唤师名），没设置再回退到报名昵称/账户名。
+      name: profile?.gameName || sign.displayName || profile?.name || "",
       rank: profile?.rank ?? "",
       avatar: profile?.avatar ?? "",
     };
@@ -189,7 +190,7 @@ export async function getMatchLineupData(id: string | number, roundParam?: strin
 
   const profiles = await prisma.playerProfile.findMany({
     where: { userId: { in: signs.map((sign) => sign.userId) } },
-    select: { userId: true, rank: true, avatar: true, name: true },
+    select: { userId: true, rank: true, avatar: true, name: true, gameName: true },
   });
   const rankMap = new Map(profiles.map((profile) => [profile.userId, profile]));
 
