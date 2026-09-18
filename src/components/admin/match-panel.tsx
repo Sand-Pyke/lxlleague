@@ -25,9 +25,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Match } from "@/lib/data";
 import {
   BO_OPTIONS,
+  BO_WINS,
   MATCH_STATUS_COLOR,
   MATCH_STATUS_LABEL,
   MATCH_STATUSES,
+  boScoreHint,
+  isValidBoScore,
   type MatchStatus,
 } from "@/lib/admin-options";
 import { asArray, errorText, getJson, postJson, successText } from "./api-client";
@@ -667,6 +670,15 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
             message.error("当前轮次没有可录入的对阵");
             return;
           }
+          const invalidPair = scorePairs.find(
+            (pair) => !isValidBoScore(selected.bo, pair.scoreOne, pair.scoreTwo),
+          );
+          if (invalidPair) {
+            message.error(
+              `${boScoreHint(selected.bo)}（${teamNameOf(invalidPair.teamOneId)} vs ${teamNameOf(invalidPair.teamTwoId)}）`,
+            );
+            return;
+          }
           void run(
             () =>
               Promise.all(
@@ -697,6 +709,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
                 <span style={{ flex: 1, textAlign: "right" }}>{teamNameOf(pair.teamOneId)}</span>
                 <InputNumber
                   min={0}
+                  max={selected ? (BO_WINS[selected.bo] ?? 0) : 0}
                   value={pair.scoreOne}
                   onChange={(value) =>
                     setScorePairs((prev) =>
@@ -709,6 +722,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
                 <span>:</span>
                 <InputNumber
                   min={0}
+                  max={selected ? (BO_WINS[selected.bo] ?? 0) : 0}
                   value={pair.scoreTwo}
                   onChange={(value) =>
                     setScorePairs((prev) =>

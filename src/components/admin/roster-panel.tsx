@@ -331,7 +331,7 @@ export function RosterPanel({ board, loading, onReload }: Props) {
   }
 
   return (
-    <Space direction="vertical" size={12} style={{ width: "100%" }}>
+    <Space orientation="vertical" size={12} style={{ width: "100%" }}>
       <Space wrap>
         <Button
           type="primary"

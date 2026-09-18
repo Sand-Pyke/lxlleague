@@ -68,6 +68,48 @@ export const rankIcon = (rank: string | null | undefined) => RANK_ICON[(rank ?? 
 
 export const BO_OPTIONS = ["BO1", "BO3", "BO5"];
 
+/** 各赛制一方获胜所需的局数。 */
+export const BO_WINS: Record<string, number> = { BO1: 1, BO3: 2, BO5: 3 };
+
+/**
+ * 各赛制允许的最终比分（不区分蓝红队，两种顺序都合法）。
+ * BO1 必须 1-0，BO3 必须 2-0 / 2-1，BO5 必须 3-0 / 3-1 / 3-2。
+ */
+export const BO_VALID_SCORES: Record<string, [number, number][]> = {
+  BO1: [
+    [1, 0],
+    [0, 1],
+  ],
+  BO3: [
+    [2, 0],
+    [0, 2],
+    [2, 1],
+    [1, 2],
+  ],
+  BO5: [
+    [3, 0],
+    [0, 3],
+    [3, 1],
+    [1, 3],
+    [3, 2],
+    [2, 3],
+  ],
+};
+
+/** 比分是否符合该赛制。未知赛制一律视为不合法，避免瞎写。 */
+export function isValidBoScore(bo: string, scoreOne: number, scoreTwo: number): boolean {
+  const valid = BO_VALID_SCORES[bo];
+  return Boolean(valid) && valid.some(([a, b]) => a === scoreOne && b === scoreTwo);
+}
+
+/** 给用户的比分规则提示。 */
+export function boScoreHint(bo: string): string {
+  if (bo === "BO1") return "BO1 的比分只能是 1-0";
+  if (bo === "BO3") return "BO3 的比分只能是 2-0 或 2-1";
+  if (bo === "BO5") return "BO5 的比分只能是 3-0、3-1 或 3-2";
+  return "比分不符合当前赛制";
+}
+
 export const MATCH_STATUSES = ["CREATED", "LIVE", "FINISHED"] as const;
 export type MatchStatus = (typeof MATCH_STATUSES)[number];
 
