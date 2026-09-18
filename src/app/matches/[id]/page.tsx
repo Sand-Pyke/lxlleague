@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function MatchDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { match, players, rounds, viewer, signed } = await getMatchPageData(Number(id));
+  const { match, players, rounds, viewer, signed, championName } = await getMatchPageData(Number(id));
   if (!match) notFound();
   return (
     <LeagueShell>
@@ -106,17 +106,25 @@ export default async function MatchDetail({ params }: { params: Promise<{ id: st
             <div key={round.round_no}>
               <p className="schedule-round">
                 第 {round.round_no} 轮
-                {round.round_no === match.currentRound && <small>当前轮</small>}
+                {match.status !== "FINISHED" && round.round_no === match.currentRound && (
+                  <small>当前轮</small>
+                )}
               </p>
               {round.pairs.map((pair, index) => (
                 <div className="schedule-row" key={`${pair.t1}-${pair.t2}-${index}`}>
                   <b>{pair.team1}</b>
-                  <span>
-                    {pair.score[0]} : {pair.score[1]}
-                  </span>
+                  <Link
+                    className="pair-score"
+                    href={`/matches/${match.id}/result?round=${round.round_no}&t1=${pair.t1}&t2=${pair.t2}`}
+                  >
+                    {pair.has_score ? `${pair.score[0]} : ${pair.score[1]}` : "— : —"}
+                  </Link>
                   <b>{pair.team2}</b>
                 </div>
               ))}
+              {championName && round.round_no === rounds[rounds.length - 1].round_no ? (
+                <p className="champion-note">🏆 今日冠军 · {championName}</p>
+              ) : null}
             </div>
           ))
         )}

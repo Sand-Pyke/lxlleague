@@ -167,7 +167,11 @@ export async function getMatchLineupData(id: string | number, roundParam?: strin
   if (!match) return { kind: "missing" as const, reason: "match" as const };
 
   const requested = roundParam ? Number(roundParam) : null;
-  const currentRound = match.currentRound || 1;
+  const totalRounds = isBracketTeamCount(teams.length)
+    ? totalRoundsFor(teams.length)
+    : Math.max(1, match.currentRound || 1, ...rounds.map((row) => row.roundNo));
+  // 历史脏数据可能把 currentRound 推到总轮数之外，展示时收敛到总轮数。
+  const currentRound = Math.min(match.currentRound || 1, totalRounds);
   const viewRound = requested ?? currentRound;
 
   let pairs;
@@ -249,12 +253,19 @@ export async function getMatchRoundsData(id: string | number) {
     bucket.push([row.teamOneId, row.teamTwoId]);
     byRound.set(row.roundNo, bucket);
   }
+
+  const teamCount = teams.length;
   const currentRound = match.currentRound || 1;
-  if (!byRound.has(currentRound)) {
+  const totalRounds = isBracketTeamCount(teamCount)
+    ? totalRoundsFor(teamCount)
+    : Math.max(1, currentRound, ...rounds.map((row) => row.roundNo));
+  // 历史脏数据可能把 currentRound 推到总轮数之外，展示时收敛到总轮数。
+  const liveRound = Math.min(currentRound, totalRounds);
+  if (!byRound.has(liveRound)) {
     const pending = (pairTeams(match, teams.filter((team) => team.id)) as [number, number | null][]).filter(
       (pair) => pair[1],
     );
-    if (pending.length) byRound.set(currentRound, pending);
+    if (pending.length) byRound.set(liveRound, pending);
   }
 
   const tmMap = new Map(teams.map((team) => [team.id, team.name]));
@@ -262,25 +273,61 @@ export async function getMatchRoundsData(id: string | number) {
   for (const sign of signs) if (sign.teamId) userTeam.set(sign.userId, sign.teamId);
   const map = scoreMap(scores);
 
+  // 冠军：赛事结束 → 最后一轮（决赛）唯一对阵的胜者。
+  let championTeamId: number | null = null;
+  if (match.status === "FINISHED") {
+    const finalPairs = byRound.get(totalRounds) ?? [];
+    if (finalPairs.length === 1) {
+      const [t1, t2] = finalPairs[0];
+      if (t1 != null && t2 != null) {
+        const [s1, s2] = resolveScore(
+          map,
+          totalRounds,
+          t1,
+          t2,
+          records.filter((record) => (record.roundNo || 1) === totalRounds),
+          userTeam,
+        );
+        if (s1 !== s2) championTeamId = s1 > s2 ? t1 : t2;
+      }
+    }
+  }
+
   const out = [...byRound.keys()]
+    .filter((roundNo) => roundNo <= totalRounds)
     .sort((a, b) => a - b)
     .map((roundNo) => {
       const roundRecords = records.filter((record) => (record.roundNo || 1) === roundNo);
       const pairs = (byRound.get(roundNo) ?? [])
         .filter((pair) => pair[1])
-        .map(([teamOneId, teamTwoId]) => ({
-          team1: tmMap.get(teamOneId) ?? "待定",
-          team2: tmMap.get(teamTwoId as number) ?? "待定",
-          t1: teamOneId,
-          t2: teamTwoId,
-          score: resolveScore(map, roundNo, teamOneId, teamTwoId, roundRecords, userTeam),
-        }));
+        .map(([teamOneId, teamTwoId]) => {
+          const hasScore = scores.some(
+            (score) =>
+              score.roundNo === roundNo &&
+              ((score.teamOneId === teamOneId && score.teamTwoId === teamTwoId) ||
+                (score.teamOneId === teamTwoId && score.teamTwoId === teamOneId)),
+          );
+          return {
+            team1: tmMap.get(teamOneId) ?? "待定",
+            team2: tmMap.get(teamTwoId as number) ?? "待定",
+            t1: teamOneId,
+            t2: teamTwoId,
+            score: resolveScore(map, roundNo, teamOneId, teamTwoId, roundRecords, userTeam),
+            has_score: hasScore,
+          };
+        });
       return { round_no: roundNo, pairs };
     });
 
   return {
     kind: "ok" as const,
-    data: { rounds: out, current_round: currentRound },
+    data: {
+      rounds: out,
+      current_round: liveRound,
+      total_rounds: totalRounds,
+      champion_team_id: championTeamId,
+      champion_name: championTeamId ? (tmMap.get(championTeamId) ?? "冠军") : "",
+    },
   };
 }
 
@@ -565,6 +612,7 @@ export async function getMatchPageData(id: number) {
     match,
     players,
     rounds: rounds.kind === "ok" ? rounds.data.rounds : [],
+    championName: rounds.kind === "ok" ? rounds.data.champion_name : "",
     viewer: viewer
       ? {
           id: viewer.id,

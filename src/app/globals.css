@@ -1661,6 +1661,23 @@ a {
   text-align: left;
   color: #fca5a5;
 }
+.schedule-row .pair-score {
+  font-size: 15px;
+  font-weight: 800;
+  color: #e2e8f0;
+  text-decoration: none;
+  letter-spacing: 0.5px;
+}
+.schedule-row .pair-score:hover {
+  color: #a78bfa;
+}
+.champion-note {
+  margin: 12px 0 4px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #fbbf24;
+  letter-spacing: 0.5px;
+}
 .signup-form {
   display: flex;
 }
