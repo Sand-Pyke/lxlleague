@@ -171,6 +171,7 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
     {
       title: "账号",
       key: "account",
+      width: 160,
       render: (_, user) => (
         <Space orientation="vertical" size={0}>
           <Typography.Text strong>{user.username}</Typography.Text>
@@ -182,8 +183,9 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
       ),
     },
     {
-      title: "游戏资料待审核账号",
+      title: "游戏资料",
       key: "profile",
+      width: 200,
       render: (_, user) =>
         user.profile ? (
           <Space orientation="vertical" size={0}>
@@ -392,7 +394,7 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
         <Space wrap style={{ marginBottom: 12 }}>
           <Input.Search
             allowClear
-            placeholder="搜索账号 / 游戏ID / KOOK"
+            placeholder="搜索账号 / 游戏ID"
             style={{ width: 260 }}
             value={keyword}
             onChange={(event) => {
@@ -452,7 +454,7 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
             columns={columns}
             dataSource={filtered}
             rowSelection={rowSelection}
-            scroll={{ y: 480 }}
+            scroll={{ x: 1020, y: 480 }}
             pagination={{
               pageSize,
               showSizeChanger: true,
