@@ -456,7 +456,10 @@ export async function getMatchResultData(id: string | number, options: MatchResu
     const [t1, t2] = selectedPair;
     for (const record of records) {
       if ((record.roundNo || 1) !== selectedRound) continue;
-      if (record.teamId !== t1 && record.teamId !== t2) continue;
+      // 战绩记录的 teamId 经常是空的（手工录入与自动导入都没有写它），
+      // 这里和下方逐行展示保持一致：回落到选手的报名队伍去归属。
+      const teamId = record.teamId ?? slotMap.get(record.userId)?.teamId ?? null;
+      if (teamId !== t1 && teamId !== t2) continue;
       const bucket = games.get(record.gameNo) ?? [];
       bucket.push(record);
       games.set(record.gameNo, bucket);
