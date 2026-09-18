@@ -48,6 +48,12 @@ export default async function Result({
   } = outcome.data;
 
   const total = BO_GAMES[match.bo] ?? 3;
+  // 小局标签动态渲染：已有系列比分时按实际打完的局数展示（如 2:0 只显示 GAME 1/2）
+  const activePair = pairs.find((pair) => pair.selected) ?? null;
+  const gamesToShow =
+    activePair && activePair.has_score && activePair.score[0] + activePair.score[1] > 0
+      ? Math.min(activePair.score[0] + activePair.score[1], total)
+      : total;
   const requestedGame = Number(query.game);
   const shownGame =
     games.some((item) => item.game_no === requestedGame) && requestedGame > 0
@@ -138,7 +144,7 @@ export default async function Result({
       {selectedPair ? (
         <>
           <section className="panel game-tabs">
-            {Array.from({ length: total }, (_, index) => index + 1).map((gameNo) => (
+            {Array.from({ length: gamesToShow }, (_, index) => index + 1).map((gameNo) => (
               <Link
                 className={gameNo === shownGame ? "selected" : ""}
                 key={gameNo}
