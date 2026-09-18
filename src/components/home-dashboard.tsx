@@ -54,7 +54,7 @@ function RankRows({
           <strong className={`rank-number rank-${index + 1}`}>{index + 1}</strong>
           <img src={player.avatar || undefined} alt="" />
           <div>
-            <b>{player.name}</b>
+            <b>{player.gameName || player.name}</b>
             <small>
               {positionText(player.position)} <RankLabel rank={player.rank} />
             </small>

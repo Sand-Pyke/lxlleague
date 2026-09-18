@@ -162,6 +162,7 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
   const [draft, setDraft] = useState<RowDraft[]>(() => [newRow()]);
   const [editTarget, setEditTarget] = useState<RecordRow | null>(null);
   const [editDraft, setEditDraft] = useState<RowDraft | null>(null);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
 
   // 自动导入（LCU agent）用的令牌：只存在管理员自己身上，可重置。
   const [importToken, setImportToken] = useState("");
@@ -282,6 +283,15 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
     } finally {
       setBusy(false);
     }
+  }
+
+  async function batchDelete() {
+    if (!selectedRowKeys.length) return;
+    const data = await run(
+      () => postJson("/api/admin/result/batch-delete", { ids: selectedRowKeys }),
+      "战绩已删除",
+    );
+    if (data) setSelectedRowKeys([]);
   }
 
   async function submit() {
@@ -796,7 +806,26 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
         </Space>
       </Card>
 
-      <Card className="antd-panel" size="small" title={`已录入战绩（${rows.length} 条）`}>
+      <Card
+        className="antd-panel"
+        size="small"
+        title={`已录入战绩（${rows.length} 条）`}
+        extra={
+          <Popconfirm
+            title={`删除选中的 ${selectedRowKeys.length} 条战绩？`}
+            description="选手统计与榜单会立即重算。"
+            okText="删除"
+            okButtonProps={{ danger: true }}
+            cancelText="取消"
+            disabled={!selectedRowKeys.length}
+            onConfirm={() => void batchDelete()}
+          >
+            <Button size="small" danger disabled={!selectedRowKeys.length} loading={busy}>
+              批量删除
+            </Button>
+          </Popconfirm>
+        }
+      >
         {loading && !rows.length ? (
           <div className="loading-state">
             <Spin />
@@ -807,6 +836,10 @@ export function RecordPanel({ matchId, signs }: { matchId: number; signs: Roster
             size="small"
             columns={recordColumns}
             dataSource={rows}
+            rowSelection={{
+              selectedRowKeys,
+              onChange: (keys) => setSelectedRowKeys(keys as number[]),
+            }}
             pagination={{ pageSize: 10, showSizeChanger: false }}
             scroll={{ x: 1320 }}
           />

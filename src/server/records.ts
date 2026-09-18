@@ -267,8 +267,15 @@ export async function upsertGameRecords(input: {
       });
       const existingByUser = new Map(existingRecords.map((record) => [record.userId, record]));
       for (const record of existingRecords) {
-        if (record.matchId !== input.matchId || record.roundNo !== input.roundNo) {
-          throw new ApiError(409, "同一来源对局已归属到其他赛事或轮次");
+        if (record.matchId !== input.matchId) {
+          throw new ApiError(409, "该来源对局之前已导入到其他赛事，请先删除那场赛事里的对应记录");
+        }
+        if (record.roundNo !== input.roundNo) {
+          throw new ApiError(
+            409,
+            `该来源对局之前已导入到第 ${record.roundNo} 轮，当前目标为第 ${input.roundNo} 轮；` +
+              "请删除该局剩余记录后整局重导，或直接在当前轮手动补录缺失的那条",
+          );
         }
       }
 
@@ -398,6 +405,14 @@ export async function deleteRecord(recordId: number) {
   if (!record) return { kind: "not_found" as const };
   await prisma.matchGameRecord.delete({ where: { id: recordId } });
   return { kind: "ok" as const };
+}
+
+/** 批量删除战绩（后台「已录入战绩」勾选后批量删除）。 */
+export async function deleteRecords(recordIds: number[]) {
+  const { count } = await prisma.matchGameRecord.deleteMany({
+    where: { id: { in: recordIds } },
+  });
+  return { kind: "ok" as const, deleted: count };
 }
 
 export async function listUserRecords(userId: number) {
