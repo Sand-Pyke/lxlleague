@@ -82,6 +82,10 @@ export async function getMatchPlayers(matchId: number) {
     return [
       {
         ...toPlayer(profile, byUser.get(signup.userId) ?? []),
+        // 名单以报名时选择的位置为准，覆盖个人资料里的默认位置。
+        position: signup.mainPosition,
+        mainPosition: signup.mainPosition,
+        subPosition: signup.subPosition,
         signupId: signup.id,
         teamId: signup.teamId,
         teamPosition: signup.teamPosition,
