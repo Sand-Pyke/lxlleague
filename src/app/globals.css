@@ -2783,6 +2783,15 @@ body {
   color: #cbd5e1;
 }
 
+/* 访客视角隐藏了「我的资料设置」，个人简介卡因此变矮，下面的赛季数据被 flex
+   拉得过长。给访客卡一个与设置区相当的最小高度，让两种视角下的布局高度一致。
+   仅大屏生效：小屏下单列布局没有等高拉伸，加了最小高度只会多出一段空白。 */
+@media (min-width: 1101px) {
+  .prof-bio-card--visitor {
+    min-height: 300px;
+  }
+}
+
 .prof-settings {
   margin-top: 16px;
   padding-top: 14px;

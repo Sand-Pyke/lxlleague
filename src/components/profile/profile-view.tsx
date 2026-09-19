@@ -566,7 +566,7 @@ export function ProfileView() {
           <div className="prof-grid">
             <div className="prof-main">
               <Card
-                className="antd-panel"
+                className={self ? "antd-panel" : "antd-panel prof-bio-card--visitor"}
                 title="个人简介"
                 extra={
                   self && !coreAdmin ? (
