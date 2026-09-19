@@ -23,6 +23,8 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { type Dayjs } from "dayjs";
+import "dayjs/locale/zh-cn";
+import zhCN from "antd/locale/zh_CN";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Match } from "@/lib/data";
 import {
@@ -38,6 +40,8 @@ import {
 import { asArray, errorText, getJson, postJson, successText } from "./api-client";
 import { RecordPanel } from "./record-panel";
 import { RosterPanel, type TeamsBoard } from "./roster-panel";
+
+dayjs.locale("zh-cn");
 
 type MatchRow = Match & { player_count: number; team_count: number; live_url: string };
 
@@ -530,6 +534,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
           />
           <DatePicker
             showTime
+            locale={zhCN.DatePicker}
             format="YYYY-MM-DD HH:mm"
             placeholder="比赛时间（可选，用于首页今日赛事展示）"
             style={{ width: "100%" }}
@@ -580,6 +585,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
             />
             <DatePicker
               showTime
+              locale={zhCN.DatePicker}
               format="YYYY-MM-DD HH:mm"
               placeholder="比赛时间（可选，用于首页今日赛事展示）"
               style={{ width: "100%" }}
