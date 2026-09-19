@@ -28,6 +28,9 @@ import { listMatchRecords } from "@/server/records";
 
 const asText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 
+/** 管理员重置用户密码时统一设置的固定初始密码。 */
+const RESET_PASSWORD = "lxl123456";
+
 /** 把前端传来的可空排期时间（ISO 字符串）解析成 Date；未传/空串/非法一律返回 null。 */
 function parseMatchDate(value: unknown): Date | null {
   if (typeof value !== "string" || !value.trim()) return null;
@@ -453,17 +456,19 @@ export async function setUserGameName(userId: number, gameName: string, actorId:
   return { msg: `已设置 ${user.username} 的游戏ID：${value || "(空)"}` };
 }
 
-/** 管理员重置密码（原 /api/admin/reset_pwd）：需要管理员提供新密码并确认。 */
-export async function resetUserPassword(userId: number, password: string, actorId: number) {
-  if (typeof password !== "string" || password.length < 6) throw badRequest("新密码至少 6 位");
-  await assertCanManageUser(actorId, userId);
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { username: true } });
-  if (!user) throw badRequest("用户不存在");
+/**
+ * 重置用户密码（仅核心管理员可用）：统一重置为固定密码 lxl123456，
+ * 普通管理员一律无权限，且不能重置自己的密码。
+ */
+export async function resetUserPassword(userId: number, actorId: number) {
+  if (!(await isCoreAdminActor(actorId))) throw forbidden("只有超级vip管理员才能重置密码");
+  if (userId === actorId) throw badRequest("不能重置自己的密码");
+  const target = await assertCanManageUser(actorId, userId);
   await prisma.user.update({
     where: { id: userId },
-    data: { passwordHash: await bcrypt.hash(password, 12) },
+    data: { passwordHash: await bcrypt.hash(RESET_PASSWORD, 12) },
   });
-  return { msg: `用户 ${user.username} 密码重置成功` };
+  return { msg: `已将 ${target.username} 的密码重置为 ${RESET_PASSWORD}` };
 }
 
 /**

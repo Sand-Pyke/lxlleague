@@ -408,6 +408,27 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
                 </Button>
               ))}
 
+            {/* 重置密码：固定为 lxl123456，仅核心管理员（admin）可用。 */}
+            {isCoreAdmin ? (
+              <Popconfirm
+                title={`重置 ${user.username} 的密码？`}
+                description="将重置为固定密码 lxl123456。"
+                okText="重置"
+                cancelText="取消"
+                onConfirm={() =>
+                  run(
+                    () => postJson("/api/admin/users/password", { userId: user.id }),
+                    user.id,
+                    "密码已重置",
+                  )
+                }
+              >
+                <Button size="small" loading={busyId === user.id}>
+                  重置密码
+                </Button>
+              </Popconfirm>
+            ) : null}
+
             {/* 待审核的新账号直接拒绝即可，不需要额外的删除入口；删除仅 admin 可用。 */}
             {user.status !== "PENDING" && isCoreAdmin ? (
               <Popconfirm
