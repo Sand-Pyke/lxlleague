@@ -5,6 +5,7 @@ import { Bracket } from "@/components/bracket";
 import { MatchRoster } from "@/components/match-roster";
 import { MatchSignup } from "@/components/match-signup";
 import { MatchCountdown } from "@/components/match-countdown";
+import { ViewLineupButton } from "@/components/view-lineup-button";
 import { formatMatchDate } from "@/lib/format-date";
 import { getMatchPageData } from "@/server/matches";
 
@@ -90,9 +91,7 @@ export default async function MatchDetail({ params }: { params: Promise<{ id: st
               defaultSub={viewer?.subPosition ?? ""}
               missingFields={viewer?.missingFields ?? []}
             />
-            <Link className="button ghost" href={`/matches/${match.id}/lineup`}>
-              查看对阵
-            </Link>
+            <ViewLineupButton matchId={match.id} teamCount={match.teamCount} />
             {match.status === "FINISHED" && (
               <Link className="button ghost" href={`/matches/${match.id}/result`}>
                 赛果数据

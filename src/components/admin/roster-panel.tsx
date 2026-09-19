@@ -28,7 +28,7 @@ import {
 import { useMemo, useState } from "react";
 import { RankLabel } from "@/components/rank-label";
 import { POSITION_OPTIONS, RANKS, positionText } from "@/lib/admin-options";
-import { TEAMS_BY_LEAGUE } from "@/lib/teams";
+import { LEAGUE_LABEL, TEAMS_BY_LEAGUE } from "@/lib/teams";
 import { errorText, postJson, successText } from "./api-client";
 
 export type RosterTeam = {
@@ -426,7 +426,7 @@ export function RosterPanel({ board, loading, onReload }: Props) {
           {TEAMS_BY_LEAGUE.map(({ league, teams: leagueTeams }) => (
             <div key={league}>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                {league}：&nbsp;
+                {LEAGUE_LABEL[league]}：&nbsp;
               </Typography.Text>
               <Space wrap style={{ marginTop: 6 }}>
                 {leagueTeams.map((team) => {

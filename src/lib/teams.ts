@@ -1,10 +1,10 @@
 /**
- * 战队数据：按联赛（LCK/LPL/LCS/LEC/PCS）分组，队名与
- * public/assets/team/<联赛小写>/<队名>.png 一一对应。
+ * 战队数据：按赛区（LCK/LPL/LCS/LEC/PCS/OTHER）分组，队名与
+ * public/assets/team/<赛区小写>/<队名>.png 一一对应。
  * 供后台「队伍编排」的战队选取与对阵图（bracket）的队徽展示共用。
  */
 
-export type League = "LCK" | "LPL" | "LCS" | "LEC" | "PCS";
+export type League = "LCK" | "LPL" | "LCS" | "LEC" | "PCS" | "OTHER";
 
 export type TeamOption = {
   /** 队伍名（同时是 Team.name 与图片文件名）。 */
@@ -19,9 +19,19 @@ const TEAMS: Record<League, string[]> = {
   LCS: ["100T", "C9", "FLY"],
   LEC: ["FNC", "G2", "RGE"],
   PCS: ["CFO"],
+  OTHER: ["GAM"],
 };
 
-export const LEAGUE_ORDER: League[] = ["LCK", "LPL", "LCS", "LEC", "PCS"];
+export const LEAGUE_ORDER: League[] = ["LCK", "LPL", "LCS", "LEC", "PCS", "OTHER"];
+
+export const LEAGUE_LABEL: Record<League, string> = {
+  LCK: "LCK",
+  LPL: "LPL",
+  LCS: "LCS",
+  LEC: "LEC",
+  PCS: "PCS",
+  OTHER: "外卡赛区",
+};
 
 export const TEAMS_BY_LEAGUE: { league: League; teams: TeamOption[] }[] = LEAGUE_ORDER.map(
   (league) => ({

@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LeagueShell } from "@/components/app-shell";
+import { Bracket } from "@/components/bracket";
 import { RankLabel } from "@/components/rank-label";
 import { championIcon, itemAsset, itemIcon } from "@/lib/game-assets";
 import { formatMatchDate } from "@/lib/format-date";
 import { roundTitle } from "@/lib/round-title";
 import { teamLogo } from "@/lib/teams";
-import { getMatchResultData } from "@/server/matches";
+import { getMatchResultData, getMatchRoundsData } from "@/server/matches";
 
 export const dynamic = "force-dynamic";
 
@@ -32,12 +33,16 @@ export default async function Result({
 }) {
   const { id } = await params;
   const query = await searchParams;
-  const outcome = await getMatchResultData(Number(id), {
-    round: query.round ? Number(query.round) : null,
-    teamOneId: query.t1 ? Number(query.t1) : null,
-    teamTwoId: query.t2 ? Number(query.t2) : null,
-  });
+  const [outcome, schedule] = await Promise.all([
+    getMatchResultData(Number(id), {
+      round: query.round ? Number(query.round) : null,
+      teamOneId: query.t1 ? Number(query.t1) : null,
+      teamTwoId: query.t2 ? Number(query.t2) : null,
+    }),
+    getMatchRoundsData(Number(id)),
+  ]);
   if (outcome.kind === "missing") notFound();
+  if (schedule.kind === "missing") notFound();
 
   const {
     match,
@@ -77,6 +82,16 @@ export default async function Result({
       <div className="back">
         <Link href="/matches">← 返回赛事中心</Link>
       </div>
+
+      {schedule.data.rounds.length > 0 ? (
+        <section className="panel bracket-panel">
+          <Bracket
+            rounds={schedule.data.rounds}
+            totalRounds={schedule.data.total_rounds}
+            matchId={id}
+          />
+        </section>
+      ) : null}
 
       <section className="result-hero">
         <p>TOURNAMENT RESULT · {match.bo}</p>
