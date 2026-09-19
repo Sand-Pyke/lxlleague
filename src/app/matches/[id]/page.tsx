@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { LeagueShell, Status } from "@/components/app-shell";
 import { MatchRoster } from "@/components/match-roster";
 import { MatchSignup } from "@/components/match-signup";
+import { MatchCountdown } from "@/components/match-countdown";
 import { formatMatchDate } from "@/lib/format-date";
 import { getMatchPageData } from "@/server/matches";
 
@@ -24,8 +25,14 @@ export default async function MatchDetail({ params }: { params: Promise<{ id: st
             {match.round} · {match.bo}
           </p>
           <h1>{match.name}</h1>
-          <span>{formatMatchDate(match.date)}</span>
+          <span className="match-hero-time">比赛时间 {formatMatchDate(match.date)}</span>
         </div>
+        {match.status === "CREATED" ? (
+          <div className="match-hero-countdown">
+            <p className="countdown-title">比赛倒计时</p>
+            <MatchCountdown target={match.date} status={match.status} />
+          </div>
+        ) : null}
       </section>
       <div className="detail-grid">
         <section className="panel">
