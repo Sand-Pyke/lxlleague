@@ -20,6 +20,7 @@
  *   --once     只扫一次就退出（联调用；不带则常驻轮询）
  *   --interval 轮询间隔秒数，默认 20
  *   --dry-run  只打印将要上传的内容，不真的 POST
+ *   --round    补录时指定写入的轮次（默认服务端当前轮）
  *   --lockfile 手动指定 lockfile 路径（自动找不到时用）
  *   --ux-log   手动指定 LeagueClientUx.log（WeGame 空 lockfile 时的兜底）
  *   --ui       启动本机可视化导入台（默认 http://127.0.0.1:3179）
@@ -73,6 +74,10 @@ const QUEUES = String(flag("queues", ""))
 const rawMinPlayers = Number(flag("min-players", 2));
 const MIN_PLAYERS =
   Number.isFinite(rawMinPlayers) && rawMinPlayers >= 1 ? Math.floor(rawMinPlayers) : 2;
+
+/** 补录时指定要写入的轮次；不传则用服务端返回的当前轮。 */
+const rawRound = Number(flag("round", 0));
+const ROUND = Number.isInteger(rawRound) && rawRound >= 1 ? rawRound : 0;
 
 // 导入令牌由 randomBytes(...).toString("base64url") 生成，只会包含这组字符。
 // 及早拒绝“<重置后的新令牌>”这类占位文本或复制时混进的中文，避免 fetch 在页面加载
@@ -647,7 +652,7 @@ async function scanOnce(creds) {
     const payload = {
       sourceGameId: gameId,
       matchId: context.match.id,
-      roundNo: context.match.currentRound,
+      roundNo: ROUND || context.match.currentRound,
       // 不传 gameNo：由服务端排到该赛事的下一个空位。agent 无从得知这是 BO5 的第几局，
       // 而同一局的重复上传会靠 sourceGameId 命中唯一键、只刷新数据不动槽位。
       playedAt: new Date(detail.gameCreation ?? Date.now()).toISOString(),
@@ -961,8 +966,11 @@ const localUiHtml = `<!doctype html>
         const target = byId("preview"); const badge = byId("previewState");
         if (!game) { badge.textContent = "请选择一局"; badge.className = "pill warn"; target.innerHTML = '<div class="empty">选中右侧对局后，这里会显示全部 10 名参与者及本站账号匹配结果。</div>'; return; }
         badge.textContent = "已匹配 " + game.matchedCount + " 人"; badge.className = "pill " + (game.matchedCount >= state.data.policy.minPlayers ? "ok" : "warn");
+        const totalRounds = state.data?.context?.match?.totalRounds ?? 1;
+        const currentRound = state.data?.context?.match?.currentRound ?? 1;
+        const roundSelect = '<label>轮次 <select id="roundNo">' + Array.from({ length: totalRounds }, (_, i) => '<option value="' + (i + 1) + '"' + (i + 1 === currentRound ? ' selected' : '') + '>第 ' + (i + 1) + ' 轮</option>').join("") + '</select></label>';
         const rows = game.players.map((player) => '<tr><td>' + escape(player.team === 100 ? '蓝方' : player.team === 200 ? '红方' : '队伍 ' + player.team) + '</td><td>' + escape(player.name) + '</td><td>' + escape(player.champion || '-') + '</td><td>' + escape(player.result === 'win' ? '胜' : '负') + '</td><td>' + player.kills + ' / ' + player.deaths + ' / ' + player.assists + '</td><td>' + player.cs + '</td><td>' + (player.matched ? '<span class="matched">' + escape(player.username) + '</span>' : '<span class="unmatched">未匹配</span>') + '</td></tr>').join("");
-        target.innerHTML = '<div class="summary"><span class="pill">队列 ' + escape(game.queueId) + '</span><span class="pill">对局时间 ' + gameTime(game.playedAt) + '</span><label>局号 <select id="gameNo"><option value="">自动分配</option>' + Array.from({length: 5}, (_, i) => '<option value="' + (i + 1) + '">第 ' + (i + 1) + ' 局</option>').join("") + '</select></label><span class="muted">至少匹配 ' + state.data.policy.minPlayers + ' 名本站选手才允许导入</span></div><div class="table-wrap"><table><thead><tr><th>阵营</th><th>游戏 ID</th><th>英雄</th><th>结果</th><th>K / D / A</th><th>CS</th><th>本站账号</th></tr></thead><tbody>' + rows + '</tbody></table></div><div class="actions"><span class="muted">导入后可在后台战绩录入中补充 MVP、SVP 与队内名次。</span><button id="import" ' + (state.busy || !state.data.context.match || game.matchedCount < state.data.policy.minPlayers ? 'disabled' : '') + '>确认导入本局</button></div>';
+        target.innerHTML = '<div class="summary"><span class="pill">队列 ' + escape(game.queueId) + '</span><span class="pill">对局时间 ' + gameTime(game.playedAt) + '</span>' + roundSelect + '<label>局号 <select id="gameNo"><option value="">自动分配</option>' + Array.from({length: 5}, (_, i) => '<option value="' + (i + 1) + '">第 ' + (i + 1) + ' 局</option>').join("") + '</select></label><span class="muted">至少匹配 ' + state.data.policy.minPlayers + ' 名本站选手才允许导入</span></div><div class="table-wrap"><table><thead><tr><th>阵营</th><th>游戏 ID</th><th>英雄</th><th>结果</th><th>K / D / A</th><th>CS</th><th>本站账号</th></tr></thead><tbody>' + rows + '</tbody></table></div><div class="actions"><span class="muted">导入后可在后台战绩录入中补充 MVP、SVP 与队内名次。</span><button id="import" ' + (state.busy || !state.data.context.match || game.matchedCount < state.data.policy.minPlayers ? 'disabled' : '') + '>确认导入本局</button></div>';
         const button = byId("import"); if (button) button.onclick = importSelected;
       }
       async function refresh() {
@@ -975,7 +983,7 @@ const localUiHtml = `<!doctype html>
         const game = (state.data?.games || []).find((item) => item.id === state.selected); if (!game) return;
         if (!confirm('确认将这局的 ' + game.matchedCount + ' 条已匹配战绩写入当前赛事吗？')) return;
         state.busy = true; renderPreview(); setNotice();
-        try { const gameNo = byId("gameNo")?.value || undefined; const response = await fetch("/api/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gameId: game.id, gameNo }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "导入失败"); setNotice(data.msg || "导入完成", "success"); await refresh(); }
+        try { const gameNo = byId("gameNo")?.value || undefined; const roundNo = byId("roundNo")?.value || undefined; const response = await fetch("/api/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gameId: game.id, gameNo, roundNo }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "导入失败"); setNotice(data.msg || "导入完成", "success"); await refresh(); }
         catch (error) { setNotice(error.message || "导入失败", "error"); }
         finally { state.busy = false; renderPreview(); }
       }
@@ -1100,12 +1108,20 @@ async function importFromLocalUi(body) {
   ) {
     throw new Error("局号必须在 1 到 5 之间");
   }
+  const requestedRoundNo =
+    body?.roundNo === undefined || body.roundNo === "" ? undefined : Number(body.roundNo);
+  if (
+    requestedRoundNo !== undefined &&
+    (!Number.isInteger(requestedRoundNo) || requestedRoundNo < 1)
+  ) {
+    throw new Error("轮次无效");
+  }
   return api("/api/import/records", {
     method: "POST",
     body: JSON.stringify({
       sourceGameId: gameId,
       matchId: context.match.id,
-      roundNo: context.match.currentRound,
+      roundNo: requestedRoundNo ?? context.match.currentRound,
       ...(requestedGameNo ? { gameNo: requestedGameNo } : {}),
       playedAt: new Date(detail.gameCreation ?? Date.now()).toISOString(),
       rows,

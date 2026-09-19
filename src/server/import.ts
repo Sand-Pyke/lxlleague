@@ -45,6 +45,12 @@ const errorJson = (error: unknown) => {
   return json({ ok: false, error: "导入失败，请查看服务端日志" }, 500);
 };
 
+/** 单败淘汰总轮数 = log2(队伍数)，与 roster.totalRoundsFor 一致；无队伍时保底 1 轮。 */
+async function totalRoundsForMatch(matchId: number) {
+  const teamCount = await prisma.team.count({ where: { matchId } });
+  return Math.max(1, Math.round(Math.log2(Math.max(teamCount, 2))));
+}
+
 /**
  * GET /api/import/context
  * agent 启动时拉一次：告诉它当前该往哪场赛事、哪一轮写，以及怎么把 Riot 的
@@ -61,6 +67,7 @@ export async function importContext(request: NextRequest) {
       where: { status: { in: ["LIVE", "FINISHED"] } },
       orderBy: { id: "desc" },
     });
+    const totalRounds = match ? await totalRoundsForMatch(match.id) : 0;
 
     const signups = match
       ? await prisma.matchSignup.findMany({
@@ -94,6 +101,7 @@ export async function importContext(request: NextRequest) {
             name: match.name,
             status: match.status,
             currentRound: match.currentRound,
+            totalRounds,
             bo: match.bo,
           }
         : null,
@@ -137,8 +145,18 @@ export async function importRecords(request: NextRequest) {
     }
 
     const roundNo = Number(body.roundNo ?? match.currentRound);
-    if (!Number.isInteger(roundNo) || roundNo < 1 || roundNo !== match.currentRound) {
-      throw new ApiError(409, "赛事轮次已变化，请刷新导入上下文后重试");
+    const totalRounds = await totalRoundsForMatch(matchId);
+    const validRound =
+      Number.isInteger(roundNo) &&
+      roundNo >= 1 &&
+      (match.status === "FINISHED" ? roundNo <= totalRounds : roundNo === match.currentRound);
+    if (!validRound) {
+      throw new ApiError(
+        409,
+        match.status === "FINISHED"
+          ? `轮次无效：该赛事共 ${totalRounds} 轮，请选择 1~${totalRounds}`
+          : "赛事轮次已变化，请刷新导入上下文后重试",
+      );
     }
     // 不传 gameNo 就由服务端自动排到该赛事的下一个空位（agent 不知道这是 BO5 的第几局）。
     const requestedGameNo = body.gameNo === undefined ? 0 : Number(body.gameNo);
