@@ -231,6 +231,7 @@ export function SignupPanel() {
           columns={columns}
           dataSource={filtered}
           pagination={{ pageSize: 12, showSizeChanger: false }}
+          scroll={{ x: 1020 }}
         />
       ) : (
         <Empty description="暂无待选人的报名记录" />
