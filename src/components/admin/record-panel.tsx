@@ -46,6 +46,7 @@ type RecordRow = {
   id: number;
   user_id: number;
   username: string;
+  game_name: string;
   champion: string;
   result: string;
   team_rank: number;
@@ -262,7 +263,7 @@ export function RecordPanel({
     if (useSignups) {
       return signs.map((sign) => ({
         value: sign.user_id,
-        label: `${sign.username}（${sign.rank || "未定段"}${sign.team_pos ? ` · ${positionText(sign.team_pos)}` : ""}）`,
+        label: `${sign.game_name || sign.username}（${sign.rank || "未定段"}${sign.team_pos ? ` · ${positionText(sign.team_pos)}` : ""}）`,
       }));
     }
     return users.map((user) => ({ value: user.id, label: user.username }));
@@ -535,7 +536,13 @@ export function RecordPanel({
   const recordColumns: ColumnsType<RecordRow> = [
     { title: "局", dataIndex: "game_no", key: "game_no", width: 60 },
     { title: "轮", dataIndex: "round_no", key: "round_no", width: 60 },
-    { title: "玩家", dataIndex: "username", key: "username", width: 110 },
+    {
+      title: "玩家",
+      dataIndex: "game_name",
+      key: "player",
+      width: 140,
+      render: (_, row) => row.game_name || row.username,
+    },
     {
       title: "英雄",
       dataIndex: "champion",
@@ -861,7 +868,7 @@ export function RecordPanel({
 
       <Modal
         open={Boolean(editTarget)}
-        title={`编辑战绩 · ${editTarget?.username ?? ""}`}
+        title={`编辑战绩 · ${editTarget?.game_name || editTarget?.username || ""}`}
         width={720}
         okText="保存"
         cancelText="取消"

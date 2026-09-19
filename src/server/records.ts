@@ -354,12 +354,13 @@ export async function listMatchRecords(matchId: number) {
   const records = await prisma.matchGameRecord.findMany({
     where: { matchId },
     orderBy: [{ gameNo: "asc" }, { id: "asc" }],
-    include: { user: { select: { username: true } } },
+    include: { user: { select: { username: true, profile: { select: { gameName: true } } } } },
   });
   return records.map((record) => ({
     id: record.id,
     user_id: record.userId,
     username: record.user?.username ?? "已注销",
+    game_name: record.user?.profile?.gameName ?? "",
     champion: record.champion,
     result: record.result,
     team_rank: record.teamRank,

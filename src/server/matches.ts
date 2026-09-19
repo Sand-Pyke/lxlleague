@@ -504,7 +504,7 @@ export async function getMatchResultData(id: string | number, options: MatchResu
               id: record.id,
               user_id: record.userId,
               username: slot?.username ?? "",
-              display_name: slot?.name ?? slot?.username ?? "",
+              display_name: slot?.gameName || slot?.name || slot?.username || "",
               avatar: slot?.avatar ?? "",
               rank: slot?.rank ?? "",
               champion: record.champion,
