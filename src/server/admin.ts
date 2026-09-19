@@ -118,8 +118,14 @@ export async function finishMatch(matchId: number) {
   const match = await requireMatch(matchId);
   if (match.status !== "LIVE") throw badRequest("只有进行中的赛事才能结束");
 
-  // 结束前必须录完本场所有战果：淘汰赛校验最后一轮，其他赛制校验当前轮。
   const teams = await prisma.team.findMany({ where: { matchId }, orderBy: { id: "asc" } });
+  // 淘汰赛按轮次自动结束：结束最后一轮时 endRound 会把状态置为 FINISHED，
+  // 这里禁止手动结束，避免「还没点结束本轮就能结束赛事」的漏洞。
+  if (isBracketTeamCount(teams.length)) {
+    throw badRequest("淘汰赛请按轮次结束：录入战果后点击「结束本轮」即可自动结束比赛");
+  }
+
+  // 结束前必须录完本场所有战果：非淘汰赛制校验当前轮。
   const finalRound = isBracketTeamCount(teams.length) ? totalRoundsFor(teams.length) : 1;
   const roundNo = Math.max(match.currentRound || 1, finalRound);
   const frozen = await prisma.matchRound.findMany({

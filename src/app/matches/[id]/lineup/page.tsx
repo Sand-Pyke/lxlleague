@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LeagueShell } from "@/components/app-shell";
+import { Bracket } from "@/components/bracket";
 import { RankLabel } from "@/components/rank-label";
+import { roundTitle } from "@/lib/round-title";
+import { teamLogo } from "@/lib/teams";
 import { getMatchLineupData, getMatchRoundsData } from "@/server/matches";
 
 export const dynamic = "force-dynamic";
@@ -38,8 +41,16 @@ export default async function Lineup({
           <Link href={`/matches/${id}`}>← 返回赛事详情</Link>
         </div>
         <h2 className="lineup-title">{data ? data.match.name : "对阵阵容"}</h2>
-        <span className="lineup-round">第 {shown} 轮 · 对阵阵容</span>
+        <span className="lineup-round">{roundTitle(shown, schedule.data.total_rounds)} · 对阵阵容</span>
       </div>
+      <section className="panel bracket-panel">
+        <Bracket
+          rounds={schedule.data.rounds}
+          totalRounds={schedule.data.total_rounds}
+          matchId={id}
+          championName={schedule.data.champion_name}
+        />
+      </section>
       <section className="panel game-tabs">
         {rounds.map((item) => (
           <Link
@@ -47,7 +58,8 @@ export default async function Lineup({
             key={item}
             href={`/matches/${id}/lineup?round=${item}`}
           >
-            第 {item} 轮{filledRounds.has(item) && <i className="game-dot" />}
+            {roundTitle(item, schedule.data.total_rounds)}
+            {filledRounds.has(item) && <i className="game-dot" />}
           </Link>
         ))}
       </section>
@@ -55,7 +67,12 @@ export default async function Lineup({
         data.pairs.map((pair, index) => (
           <section className="panel pair-card" key={`${pair.team1.id}-${pair.team2.id}-${index}`}>
             <div className="pair-head">
-              <b>{pair.team1.name}</b>
+              <b>
+                {pair.team1.name}
+                {teamLogo(pair.team1.name) && (
+                  <img className="pair-team-logo" src={teamLogo(pair.team1.name)} alt="" />
+                )}
+              </b>
               <span>
                 {pair.team2.id ? (
                   <Link
@@ -68,7 +85,12 @@ export default async function Lineup({
                   `${pair.score[0]} : ${pair.score[1]}`
                 )}
               </span>
-              <b>{pair.team2.name}</b>
+              <b>
+                {teamLogo(pair.team2.name) && (
+                  <img className="pair-team-logo" src={teamLogo(pair.team2.name)} alt="" />
+                )}
+                {pair.team2.name}
+              </b>
             </div>
             <div className="lineup">
               <section>

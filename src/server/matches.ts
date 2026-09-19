@@ -612,6 +612,7 @@ export async function getMatchPageData(id: number) {
     match,
     players,
     rounds: rounds.kind === "ok" ? rounds.data.rounds : [],
+    totalRounds: rounds.kind === "ok" ? rounds.data.total_rounds : 0,
     championName: rounds.kind === "ok" ? rounds.data.champion_name : "",
     viewer: viewer
       ? {

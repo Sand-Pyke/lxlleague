@@ -27,7 +27,8 @@ import {
 } from "antd";
 import { useMemo, useState } from "react";
 import { RankLabel } from "@/components/rank-label";
-import { POSITION_OPTIONS, RANKS, TEAM_CODES, positionText } from "@/lib/admin-options";
+import { POSITION_OPTIONS, RANKS, positionText } from "@/lib/admin-options";
+import { TEAMS_BY_LEAGUE } from "@/lib/teams";
 import { errorText, postJson, successText } from "./api-client";
 
 export type RosterTeam = {
@@ -421,28 +422,45 @@ export function RosterPanel({ board, loading, onReload }: Props) {
           </Space>
         }
       >
-        <Space wrap>
-          {TEAM_CODES.map((code) => {
-            const used = usedTeamNames.includes(code);
-            return (
-              <Tooltip key={code} title={used ? "该队伍已存在" : `创建队伍 ${code}`}>
-                <Button
-                  size="small"
-                  type={used ? "default" : "primary"}
-                  disabled={used || busy}
-                  onClick={() =>
-                    run(
-                      () => postJson("/api/admin/team/create", { matchId: match.id, name: code }),
-                      `${code} 创建成功`,
-                    )
-                  }
-                >
-                  {code}
-                  {used ? " ✓" : ""}
-                </Button>
-              </Tooltip>
-            );
-          })}
+        <Space orientation="vertical" size={12} style={{ width: "100%" }}>
+          {TEAMS_BY_LEAGUE.map(({ league, teams: leagueTeams }) => (
+            <div key={league}>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {league}：&nbsp;
+              </Typography.Text>
+              <Space wrap style={{ marginTop: 6 }}>
+                {leagueTeams.map((team) => {
+                  const used = usedTeamNames.includes(team.name.toUpperCase());
+                  return (
+                    <Tooltip
+                      key={team.name}
+                      title={used ? "该队伍已存在" : `创建队伍 ${team.name}`}
+                    >
+                      <Button
+                        size="small"
+                        type={used ? "default" : "primary"}
+                        disabled={used || busy}
+                        onClick={() =>
+                          run(
+                            () =>
+                              postJson("/api/admin/team/create", {
+                                matchId: match.id,
+                                name: team.name,
+                              }),
+                            `${team.name} 创建成功`,
+                          )
+                        }
+                      >
+                        <img src={team.logo} alt={team.name} className="team-option-logo" />
+                        {team.name}
+                        {used ? " ✓" : ""}
+                      </Button>
+                    </Tooltip>
+                  );
+                })}
+              </Space>
+            </div>
+          ))}
         </Space>
       </Card>
 

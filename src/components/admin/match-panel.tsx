@@ -331,6 +331,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
               <Typography.Text type="secondary">基础信息</Typography.Text>
               <Button
                 size="small"
+                disabled={selected.status === "FINISHED"}
                 onClick={() =>
                   setEditForm({
                     name: selected.name,
@@ -356,6 +357,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
               />
               <Button
                 size="small"
+                disabled={selected.status === "FINISHED"}
                 onClick={() => {
                   setLiveValue(selected.liveUrl ?? "");
                   setLiveOpen(true);
@@ -383,24 +385,13 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
               >
                 结束选人并开赛
               </Button>
-              <Button
-                size="small"
-                danger
-                disabled={selected.status !== "LIVE"}
-                loading={busy}
-                onClick={() =>
-                  void run(() => postJson(`/api/admin/match/finish/${selected.id}`), "比赛已结束")
-                }
-              >
-                结束赛事
-              </Button>
             </Space>
 
             <Space wrap>
               <Typography.Text type="secondary">对战与战果</Typography.Text>
               <Button
                 size="small"
-                disabled={!board?.teams.length || selected.status === "CREATED"}
+                disabled={!board?.teams.length || selected.status !== "LIVE"}
                 onClick={() => {
                   setScorePairs(
                     (board?.round_pairs ?? []).map((pair) => ({
@@ -418,7 +409,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
               </Button>
               <Button
                 size="small"
-                disabled={!board?.has_score || selected.status === "CREATED"}
+                disabled={!board?.has_score || selected.status !== "LIVE"}
                 onClick={() =>
                   void run(
                     () => postJson(`/api/admin/match/round/end/${selected.id}`),
@@ -436,6 +427,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
               <Button
                 size="small"
                 icon={<SolutionOutlined />}
+                disabled={selected.status === "FINISHED"}
                 onClick={() => setRosterOpen(true)}
               >
                 队伍编排
