@@ -91,7 +91,7 @@ function heroNames(player: Player) {
 
 function HeroCell({ player }: { player: Player }) {
   const heroes = heroNames(player);
-  if (!heroes.length) return <span className="players-hero-empty" />;
+  if (!heroes.length) return null;
   return (
     <span className="players-hero-list">
       {heroes.map((hero) => {
