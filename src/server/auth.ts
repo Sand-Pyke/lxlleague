@@ -167,6 +167,8 @@ export async function getViewer() {
       backgroundImage: true,
       // 报名赛事前需要校验资料是否完善，顶栏外壳一并带出来供赛事页使用。
       kookName: true,
+      // 处罚截止时间：赛事页据此决定是否展示报名入口。
+      banUntil: true,
       profile: {
         select: {
           mainPosition: true,

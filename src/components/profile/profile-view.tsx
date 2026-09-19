@@ -57,7 +57,7 @@ import {
   USERNAME_HINT,
   usernameFormatError,
 } from "@/lib/credentials";
-import { GAME_NAME_HINT, isValidGameName } from "@/lib/game-name";
+import { GAME_NAME_HINT, isValidGameNameBase, isValidGameTag, splitGameName } from "@/lib/game-name";
 import { championChoices, championIcon, itemIcon } from "@/lib/game-assets";
 import { missingSignupRequirements } from "@/lib/profile-requirements";
 
@@ -154,6 +154,7 @@ const emptyDraft = {
   bio: "",
   kookName: "",
   gameName: "",
+  gameTag: "",
   heroes: [] as string[],
   accountName: "",
   oldPwd: "",
@@ -222,10 +223,12 @@ export function ProfileView() {
 
   function openEdit(kind: EditKind) {
     if (!payload) return;
+    const game = splitGameName(payload.user.gameName);
     setDraft({
       bio: payload.user.bio ?? "",
       kookName: payload.user.kookName ?? "",
-      gameName: payload.user.gameName ?? "",
+      gameName: game.name,
+      gameTag: game.tag,
       heroes: [...(payload.user.favoriteHeroes ?? [])],
       accountName: payload.user.username ?? "",
       oldPwd: "",
@@ -294,9 +297,15 @@ export function ProfileView() {
       messageApi.error("请选择段位");
       return;
     }
-    if (editKind === "game" && !isValidGameName(draft.gameName)) {
-      messageApi.error(`游戏ID格式不正确：${GAME_NAME_HINT}`);
-      return;
+    if (editKind === "game") {
+      if (!isValidGameNameBase(draft.gameName.trim())) {
+        messageApi.error("名称部分仅限 1-16 位中文/字母/数字");
+        return;
+      }
+      if (!isValidGameTag(draft.gameTag.trim())) {
+        messageApi.error("数字编号需为 3-6 位数字");
+        return;
+      }
     }
     if (editKind === "avatar" && !draft.avatar) {
       messageApi.error("请选择一个表情头像");
@@ -307,7 +316,7 @@ export function ProfileView() {
       const request: Record<EditKind, [string, Record<string, unknown>]> = {
         bio: ["/api/user/update_bio", { bio: draft.bio }],
         kook: ["/api/user/update_kook", { kook_name: draft.kookName }],
-        game: ["/api/user/game_name", { game_name: draft.gameName }],
+        game: ["/api/user/game_name", { game_name: `${draft.gameName.trim()}#${draft.gameTag.trim()}` }],
         hero: ["/api/user/favorite_heroes", { heroes: draft.heroes }],
         account: ["/api/user/change_username", { username: draft.accountName }],
         pwd: ["/api/user/change_pwd", { old_pwd: draft.oldPwd, new_pwd: draft.newPwd }],
@@ -799,12 +808,25 @@ export function ProfileView() {
         ) : null}
         {editKind === "game" ? (
           <Space orientation="vertical" size={6} style={{ width: "100%" }}>
-            <Input
-              value={draft.gameName}
-              maxLength={32}
-              placeholder="例如 向阳而生#32250"
-              onChange={(event) => setDraft({ ...draft, gameName: event.target.value })}
-            />
+            <Space.Compact style={{ width: "100%" }}>
+              <Input
+                value={draft.gameName}
+                maxLength={16}
+                placeholder="名称（中文/英文/数字）"
+                onChange={(event) => setDraft({ ...draft, gameName: event.target.value })}
+              />
+              <Input
+                value="#"
+                disabled
+                style={{ width: 36, textAlign: "center", padding: 0 }}
+              />
+              <Input
+                value={draft.gameTag}
+                maxLength={6}
+                placeholder="数字编号"
+                onChange={(event) => setDraft({ ...draft, gameTag: event.target.value })}
+              />
+            </Space.Compact>
             <Typography.Text type="secondary">
               {GAME_NAME_HINT}，需与游戏内名称完全一致（战绩导入按它匹配你的账号）。
             </Typography.Text>

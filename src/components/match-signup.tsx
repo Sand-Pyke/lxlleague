@@ -11,6 +11,7 @@ import {
   normalizeSubPosition,
   subPositionChoices,
 } from "@/lib/admin-options";
+import { banNotice } from "@/lib/ban";
 
 const isPosition = (value: string) => POSITION_OPTIONS.includes(value);
 
@@ -27,6 +28,8 @@ type Props = {
   /** 个人主页默认位置，可能为 FILL（未设置） */
   defaultMain: string;
   defaultSub: string;
+  /** 处罚截止时间（ISO 字符串）；处罚期内展示提示并禁止报名。 */
+  banUntil?: string | null;
   /** 报名前还缺的资料项（空数组 = 资料完善） */
   missingFields: string[];
 };
@@ -40,6 +43,7 @@ export function MatchSignup({
   isCoreAdmin,
   defaultMain,
   defaultSub,
+  banUntil,
   missingFields,
 }: Props) {
   const router = useRouter();
@@ -60,6 +64,15 @@ export function MatchSignup({
       <Link className="button primary" href="/login">
         登录后报名
       </Link>
+    );
+  }
+  // 处罚期内直接展示提示，不给报名入口。
+  const banText = banNotice(banUntil);
+  if (banText) {
+    return (
+      <div className="signup-blocked">
+        <span className="signup-blocked-note">{banText}</span>
+      </div>
     );
   }
   // 资料没填全就先不让报名，直接给出补全入口，避免提交后才被服务端拒绝。

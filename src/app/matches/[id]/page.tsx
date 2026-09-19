@@ -89,6 +89,7 @@ export default async function MatchDetail({ params }: { params: Promise<{ id: st
               signed={Boolean(signed)}
               defaultMain={viewer?.mainPosition ?? ""}
               defaultSub={viewer?.subPosition ?? ""}
+              banUntil={viewer?.banUntil ?? null}
               missingFields={viewer?.missingFields ?? []}
             />
             <ViewLineupButton matchId={match.id} teamCount={match.teamCount} />

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeSubPosition } from "@/lib/admin-options";
+import { banNotice } from "@/lib/ban";
 import { missingSignupRequirements } from "@/lib/profile-requirements";
 import { getSessionUser, getViewer, isCoreAdminUsername } from "@/server/auth";
 import {
@@ -581,6 +582,13 @@ export async function updateSignup(request: NextRequest, id: string, action: "si
   if (action === "signup") {
     const options = await signupOptionsFrom(request);
     if (options instanceof NextResponse) return options;
+    // 处罚期内禁止报名：先于资料校验返回，避免处罚用户看到「补全资料」之类的误导。
+    const account = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { banUntil: true },
+    });
+    const banText = banNotice(account?.banUntil);
+    if (banText) return NextResponse.json({ error: banText }, { status: 403 });
     const missing = await missingSignupFields(user.id);
     if (missing.length)
       return NextResponse.json(
@@ -621,6 +629,8 @@ export async function getMatchPageData(id: number) {
           isCoreAdmin: isCoreAdminUsername(viewer.username),
           mainPosition: viewer.profile?.mainPosition ?? "",
           subPosition: viewer.profile?.subPosition ?? "",
+          // 处罚截止时间：非空且在处罚期内时，赛事页用提示代替报名按钮。
+          banUntil: viewer.banUntil ? viewer.banUntil.toISOString() : null,
           // 报名前必须补全的资料（空数组 = 资料完善），供赛事页决定是否展示报名按钮。
           missingFields: missingSignupRequirements({
             gameName: viewer.profile?.gameName ?? "",

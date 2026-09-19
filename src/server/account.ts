@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { isBackgroundFile, BACKGROUND_PREFIX } from "@/lib/backgrounds";
 import { normalizeDefaultAvatar, randomDefaultAvatar } from "@/lib/default-avatars";
 import { RANKS, RANK_REVIEW_NOTE, normalizeRank, normalizeSubPosition } from "@/lib/admin-options";
-import { GAME_NAME_HINT, isValidGameName } from "@/lib/game-name";
+import { GAME_NAME_HINT, gameTagOf, isValidGameName } from "@/lib/game-name";
 import { MAX_FAVORITE_HEROES, formatFavoriteHeroes } from "@/lib/favorite-heroes";
 import { canonicalChampionName } from "@/lib/game-assets";
 import { passwordFormatError, usernameFormatError } from "@/lib/credentials";
@@ -106,7 +106,21 @@ export async function updateGameName(request: NextRequest) {
   const gameName = text(body.game_name).trim();
   if (!isValidGameName(gameName)) return message(`游戏ID格式不正确：${GAME_NAME_HINT}`, 400);
   await ensureProfile(userId);
-  await prisma.playerProfile.update({ where: { userId }, data: { gameName } });
+  // 名称可重复，但 # 后的数字编号全局唯一：先按编号查重，再兜底捕获数据库唯一索引的并发冲突。
+  const tag = gameTagOf(gameName);
+  const existing = await prisma.playerProfile.findFirst({
+    where: { gameName: { endsWith: `#${tag}`, mode: "insensitive" }, userId: { not: userId } },
+    select: { userId: true },
+  });
+  if (existing) return message("该数字编号已被其他选手使用", 409);
+  try {
+    await prisma.playerProfile.update({ where: { userId }, data: { gameName } });
+  } catch (error) {
+    if ((error as { code?: string }).code === "P2002") {
+      return message("该数字编号已被其他选手使用", 409);
+    }
+    throw error;
+  }
   return message("游戏ID已保存");
 }
 

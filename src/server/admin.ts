@@ -8,7 +8,7 @@ import {
   type ReviewStatus,
 } from "@/lib/admin-options";
 import { prisma } from "@/lib/prisma";
-import { GAME_NAME_HINT, isValidGameName } from "@/lib/game-name";
+import { GAME_NAME_HINT, gameTagOf, isValidGameName } from "@/lib/game-name";
 import { randomDefaultAvatar } from "@/lib/default-avatars";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
@@ -305,6 +305,7 @@ export async function adminUserList(viewerId?: number) {
       reviewNote: true,
       pendingRank: true,
       kookName: true,
+      banUntil: true,
       createdAt: true,
       profile: {
         select: {
@@ -428,11 +429,27 @@ export async function setUserGameName(userId: number, gameName: string, actorId:
   // 允许清空（留空表示还未填写），但填了就必须符合 名称#数字编号 的格式。
   const value = gameName.trim();
   if (value && !isValidGameName(value)) throw badRequest(`游戏ID格式不正确：${GAME_NAME_HINT}`);
-  await prisma.playerProfile.upsert({
-    where: { userId },
-    update: { gameName: value },
-    create: { userId, name: user.username, gameName: value, avatar: randomDefaultAvatar() },
-  });
+  if (value) {
+    // 名称可重复，但 # 后的数字编号全局唯一：先查重，再兜底数据库唯一索引的并发冲突。
+    const tag = gameTagOf(value);
+    const existing = await prisma.playerProfile.findFirst({
+      where: { gameName: { endsWith: `#${tag}`, mode: "insensitive" }, userId: { not: userId } },
+      select: { userId: true },
+    });
+    if (existing) throw badRequest("该数字编号已被其他选手使用");
+  }
+  try {
+    await prisma.playerProfile.upsert({
+      where: { userId },
+      update: { gameName: value },
+      create: { userId, name: user.username, gameName: value, avatar: randomDefaultAvatar() },
+    });
+  } catch (error) {
+    if ((error as { code?: string }).code === "P2002") {
+      throw badRequest("该数字编号已被其他选手使用");
+    }
+    throw error;
+  }
   return { msg: `已设置 ${user.username} 的游戏ID：${value || "(空)"}` };
 }
 
@@ -485,10 +502,47 @@ export async function rotateImportToken(adminId: number) {
 }
 
 /**
+ * 处罚用户：限制其报名（banUntil 之前禁止报名）。
+ * 普通管理员只能处罚普通用户；管理员账号只有核心管理员（admin）能处罚，
+ * 核心管理员账号（admin）本身不可被处罚。
+ */
+export async function banUser(userId: number, days: number, actorId: number) {
+  if (!Number.isInteger(days) || days < 1 || days > 3650)
+    throw badRequest("处罚天数需为 1-3650 之间的整数");
+  const target = await assertCanManageUser(actorId, userId);
+  if (isCoreAdminUsername(target.username)) throw forbidden("不能处罚超级vip管理员账号");
+  // 已报名未结束赛事的用户不能处罚：先取消报名（或等赛事结束）再处罚。
+  const activeSignups = await prisma.matchSignup.findMany({
+    where: { userId, match: { status: { in: ["CREATED", "LIVE"] } } },
+    select: { match: { select: { name: true } } },
+  });
+  if (activeSignups.length) {
+    const names = activeSignups.map((sign) => sign.match.name);
+    const shown =
+      names.length > 3 ? `${names.slice(0, 3).join("、")} 等 ${names.length} 个赛事` : names.join("、");
+    throw badRequest(`该用户已报名「${shown}」，暂时不能处罚`);
+  }
+  const banUntil = new Date(Date.now() + days * 86400000);
+  await prisma.user.update({ where: { id: userId }, data: { banUntil } });
+  return { msg: `已处罚 ${target.username}，${days} 天内禁止报名` };
+}
+
+/** 解除处罚：立即恢复报名资格。 */
+export async function unbanUser(userId: number, actorId: number) {
+  const target = await assertCanManageUser(actorId, userId);
+  await prisma.user.update({ where: { id: userId }, data: { banUntil: null } });
+  return { msg: `已解除 ${target.username} 的处罚` };
+}
+
+/**
  * 删除用户：先清报名并同步各赛事人数，再删账号（资料/战绩随外键级联删除）。
  * 管理员账号只有核心管理员能删。
  */
 export async function deleteUser(userId: number, currentUserId: number) {
+  // 删除用户是高风险操作：只有核心管理员（admin）能删，普通管理员一律拒绝。
+  if (!(await isCoreAdminActor(currentUserId))) {
+    throw forbidden("只有超级vip管理员才能删除用户");
+  }
   if (userId === currentUserId) throw badRequest("不能删除当前登录的管理员账号");
   await assertCanManageUser(currentUserId, userId);
   const user = await prisma.user.findUnique({ where: { id: userId } });

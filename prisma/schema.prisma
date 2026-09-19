@@ -32,6 +32,8 @@ model User {
   kookName        String            @default("")
   backgroundImage String            @default("")
   importToken     String            @unique @default(cuid())
+  /// 报名处罚截止时间：非空且晚于当前时间时禁止报名；null 表示未处罚。
+  banUntil        DateTime?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   profile         PlayerProfile?
@@ -45,6 +47,9 @@ model PlayerProfile {
   id             Int     @id @default(autoincrement())
   userId         Int     @unique
   name           String
+  /// 游戏ID（召唤师名，格式 名称#编号）。名称可重复，但 # 后的数字编号全局唯一
+  /// （不区分大小写），由迁移 202609190003 对 split_part 的部分唯一索引保证；
+  /// 空串或不含 # 的旧数据不参与约束。
   gameName       String
   mainPosition   String  @default("FILL")
   subPosition    String  @default("FILL")

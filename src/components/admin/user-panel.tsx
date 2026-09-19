@@ -7,8 +7,10 @@ import {
   Card,
   Empty,
   Input,
+  InputNumber,
   Modal,
   Popconfirm,
+  Radio,
   Select,
   Space,
   Spin,
@@ -42,6 +44,8 @@ type AdminUser = {
   /** 待审核的新段位；非空表示有一笔段位修改申请在排队。 */
   pendingRank: string;
   kookName: string | null;
+  /** 处罚截止时间（ISO 字符串），null 表示未处罚。 */
+  banUntil: string | null;
   createdAt: string;
   profile: {
     gameName: string;
@@ -53,6 +57,10 @@ type AdminUser = {
 };
 
 const formatTime = (value: string) => new Date(value).toLocaleString("zh-CN", { hour12: false });
+
+/** 是否处于处罚期内。 */
+const isBanned = (banUntil: string | null) =>
+  Boolean(banUntil && new Date(banUntil).getTime() > Date.now());
 
 export function UserPanel({ onChanged }: { onChanged?: () => void }) {
   const viewer = useViewer();
@@ -67,6 +75,10 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
   /** 正在重置段位的账号 + 选中的段位（undefined = 还没选）。 */
   const [rankTarget, setRankTarget] = useState<AdminUser | null>(null);
   const [rankValue, setRankValue] = useState<string | undefined>(undefined);
+  /** 正在处罚的账号 + 处罚时长选项（1/3/7 天或自定义）。 */
+  const [banTarget, setBanTarget] = useState<AdminUser | null>(null);
+  const [banChoice, setBanChoice] = useState("1");
+  const [banCustomDays, setBanCustomDays] = useState(1);
   /** 批量审核：勾选的账号 ID（仅在「待审核」筛选下启用）、当前页码与每页条数。 */
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
   const [batchBusy, setBatchBusy] = useState(false);
@@ -174,7 +186,14 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
       width: 160,
       render: (_, user) => (
         <Space orientation="vertical" size={0}>
-          <Typography.Text strong>{user.username}</Typography.Text>
+          <Space size={6} wrap>
+            <Typography.Text strong>{user.username}</Typography.Text>
+            {isBanned(user.banUntil) ? (
+              <Tag color="red" style={{ marginInlineEnd: 0, fontSize: 11 }}>
+                已处罚至 {formatTime(user.banUntil!)}
+              </Tag>
+            ) : null}
+          </Space>
           {/* KOOK 由用户自己在个人中心维护，后台不再提示未填写。 */}
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {user.isAdmin ? "管理员" : "普通用户"}
@@ -353,8 +372,44 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
               重置段位
             </Button>
 
-            {/* 待审核的新账号直接拒绝即可，不需要额外的删除入口。 */}
-            {user.status !== "PENDING" ? (
+            {/* 处罚/解除处罚：普通管理员可处罚普通用户；管理员账号只有 admin 能处罚
+              （manageable 与服务端 assertCanManageUser 双重把关）。 */}
+            {user.status === "APPROVED" &&
+              (isBanned(user.banUntil) ? (
+                <Popconfirm
+                  title={`解除 ${user.username} 的处罚？`}
+                  description="解除后该用户可立即报名。"
+                  okText="解除"
+                  cancelText="取消"
+                  onConfirm={() =>
+                    run(
+                      () => postJson("/api/admin/users/unban", { userId: user.id }),
+                      user.id,
+                      "已解除处罚",
+                    )
+                  }
+                >
+                  <Button size="small" loading={busyId === user.id}>
+                    解除处罚
+                  </Button>
+                </Popconfirm>
+              ) : (
+                <Button
+                  size="small"
+                  danger
+                  loading={busyId === user.id}
+                  onClick={() => {
+                    setBanTarget(user);
+                    setBanChoice("1");
+                    setBanCustomDays(1);
+                  }}
+                >
+                  处罚
+                </Button>
+              ))}
+
+            {/* 待审核的新账号直接拒绝即可，不需要额外的删除入口；删除仅 admin 可用。 */}
+            {user.status !== "PENDING" && isCoreAdmin ? (
               <Popconfirm
                 title={`删除 ${user.username}？`}
                 description="该账号的报名与战绩会一并删除，且不可恢复。"
@@ -510,6 +565,56 @@ export function UserPanel({ onChanged }: { onChanged?: () => void }) {
           />
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             重置后立即生效，并会同时清掉该账号待审的段位申请与备注。「未设置」表示清空段位。
+          </Typography.Text>
+        </Space>
+      </Modal>
+
+      <Modal
+        open={Boolean(banTarget)}
+        title={`处罚 ${banTarget?.username ?? ""}（禁止报名）`}
+        okText="确认处罚"
+        cancelText="取消"
+        confirmLoading={busyId === banTarget?.id}
+        onCancel={() => setBanTarget(null)}
+        onOk={async () => {
+          if (!banTarget) return;
+          const days = banChoice === "custom" ? banCustomDays : Number(banChoice);
+          if (!Number.isInteger(days) || days < 1) {
+            message.warning("请填写有效的处罚天数");
+            return;
+          }
+          const succeeded = await run(
+            () => postJson("/api/admin/users/ban", { userId: banTarget.id, days }),
+            banTarget.id,
+            "处罚已生效",
+          );
+          if (succeeded) setBanTarget(null);
+        }}
+      >
+        <Space orientation="vertical" size={10} style={{ width: "100%" }}>
+          <Radio.Group
+            value={banChoice}
+            onChange={(event) => setBanChoice(event.target.value)}
+            options={[
+              { value: "1", label: "1 天" },
+              { value: "3", label: "3 天" },
+              { value: "7", label: "7 天" },
+              { value: "custom", label: "自定义" },
+            ]}
+          />
+          {banChoice === "custom" ? (
+            <InputNumber
+              style={{ width: "100%" }}
+              min={1}
+              max={3650}
+              precision={0}
+              value={banCustomDays}
+              onChange={(value) => setBanCustomDays(Number(value ?? 1))}
+              addonAfter="天"
+            />
+          ) : null}
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            处罚期内该用户无法报名任何赛事，会看到「因不友善行为被处罚」的提示。
           </Typography.Text>
         </Space>
       </Modal>
