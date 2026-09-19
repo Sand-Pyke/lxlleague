@@ -15,7 +15,7 @@ export type TeamOption = {
 
 const TEAMS: Record<League, string[]> = {
   LCK: ["DK", "DRX", "GENG", "HLE", "KT", "T1"],
-  LPL: ["AL", "BLG", "EDG", "IG", "JDG", "LGD", "LNG", "NIP", "TES", "WBG", "WE"],
+  LPL: ["AL", "BLG", "EDG", "IG", "JDG", "LGD", "LNG", "NIP", "RNG", "TES", "WBG", "WE"],
   LCS: ["100T", "C9", "FLY"],
   LEC: ["FNC", "G2", "RGE"],
   PCS: ["CFO"],
