@@ -54,11 +54,11 @@ export async function importContext(request: NextRequest) {
   try {
     await requireImporter(request);
 
-    // Never fall back to a CREATED match: the agent is long-running and an
-    // accidental import is much more costly than requiring an admin to mark a
-    // match as LIVE first.
+    // 只允许写入「进行中」或「已结束」的赛事：已结束的赛事用于补录战绩，
+    // 但绝不回退到 CREATED（未开赛）的赛事 —— agent 是长驻进程，误导入的
+    // 代价远大于让管理员先把赛事标记为进行中。
     const match = await prisma.match.findFirst({
-      where: { status: "LIVE" },
+      where: { status: { in: ["LIVE", "FINISHED"] } },
       orderBy: { id: "desc" },
     });
 
@@ -132,7 +132,9 @@ export async function importRecords(request: NextRequest) {
     if (!Number.isInteger(matchId) || matchId < 1) throw new ApiError(400, "缺少有效赛事 ID");
     const match = await prisma.match.findUnique({ where: { id: matchId } });
     if (!match) throw new ApiError(404, "赛事不存在");
-    if (match.status !== "LIVE") throw new ApiError(409, "仅能向进行中的赛事导入战绩");
+    if (match.status !== "LIVE" && match.status !== "FINISHED") {
+      throw new ApiError(409, "仅能向进行中或已结束的赛事导入战绩");
+    }
 
     const roundNo = Number(body.roundNo ?? match.currentRound);
     if (!Number.isInteger(roundNo) || roundNo < 1 || roundNo !== match.currentRound) {

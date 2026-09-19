@@ -594,7 +594,7 @@ const uploaded = new Set();
 async function scanOnce(creds) {
   const context = await api("/api/import/context");
   if (!context.match) {
-    warn("服务端没有可写入的赛事，先在后台建一场并进入「进行中」。");
+    warn("服务端没有可写入的赛事，先在后台建一场并进入「进行中」，或选择一场已结束的赛事补录。");
     return 0;
   }
 
@@ -695,7 +695,7 @@ async function probe() {
       return 1;
     }
     if (!context.match) {
-      console.error("  ✖ 服务端没有可写入的赛事。先到后台建一场，或把某场置为「进行中」。");
+      console.error("  ✖ 服务端没有可写入的赛事。先到后台建一场并置为「进行中」，或选择一场已结束的赛事补录。");
       return 1;
     }
     log(
@@ -948,7 +948,8 @@ const localUiHtml = `<!doctype html>
         const context = data.context;
         byId("lcuState").textContent = data.lcu.connected ? "LCU 已连接" : "LCU 未连接";
         byId("lcuState").className = "pill " + (data.lcu.connected ? "ok" : "warn");
-        byId("context").innerHTML = context.match ? '<strong>' + escape(context.match.name) + '</strong><div class="meta"><span class="pill ok">进行中</span><span class="pill">第 ' + context.match.currentRound + ' 轮</span><span class="pill">BO' + context.match.bo + '</span><span class="pill">已报名 ' + context.players.length + ' 人</span></div><p style="margin-top:12px">写入目标由服务端固定为当前进行中的赛事和轮次，避免误导入到历史赛事。</p>' : '<div class="empty">服务端没有进行中的赛事。请先在管理后台把目标赛事设为「进行中」。</div>';
+        const matchLabel = context.match?.status === "FINISHED" ? "已结束" : "进行中";
+        byId("context").innerHTML = context.match ? '<strong>' + escape(context.match.name) + '</strong><div class="meta"><span class="pill ' + (context.match.status === "FINISHED" ? "" : "ok") + '">' + matchLabel + '</span><span class="pill">第 ' + context.match.currentRound + ' 轮</span><span class="pill">BO' + context.match.bo + '</span><span class="pill">已报名 ' + context.players.length + ' 人</span></div><p style="margin-top:12px">写入目标由服务端固定为当前可写入的赛事和轮次，已结束的赛事可用于补录战绩。</p>' : '<div class="empty">服务端没有可写入的赛事。请先在管理后台把目标赛事设为「进行中」，或选择一场已结束的赛事补录。</div>';
         const games = data.games || [];
         byId("gameCount").textContent = games.length + " 局";
         byId("games").innerHTML = games.length ? games.map((game) => '<button class="game ' + (state.selected === game.id ? 'active' : '') + '" data-game="' + escape(game.id) + '"><strong>' + gameTime(game.playedAt) + '</strong><small>对局 ' + escape(game.id) + ' · 队列 ' + escape(game.queueId) + ' · 匹配 ' + game.matchedCount + ' / ' + game.players.length + ' 人</small></button>').join("") : '<div class="empty">没有可读取的对局历史。</div>';
@@ -972,7 +973,7 @@ const localUiHtml = `<!doctype html>
       }
       async function importSelected() {
         const game = (state.data?.games || []).find((item) => item.id === state.selected); if (!game) return;
-        if (!confirm('确认将这局的 ' + game.matchedCount + ' 条已匹配战绩写入当前进行中的赛事吗？')) return;
+        if (!confirm('确认将这局的 ' + game.matchedCount + ' 条已匹配战绩写入当前赛事吗？')) return;
         state.busy = true; renderPreview(); setNotice();
         try { const gameNo = byId("gameNo")?.value || undefined; const response = await fetch("/api/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gameId: game.id, gameNo }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "导入失败"); setNotice(data.msg || "导入完成", "success"); await refresh(); }
         catch (error) { setNotice(error.message || "导入失败", "error"); }
@@ -1077,7 +1078,7 @@ async function importFromLocalUi(body) {
   const gameId = String(body?.gameId ?? "").trim();
   if (!gameId || gameId.length > 128) throw new Error("请选择有效的对局");
   const context = await api("/api/import/context");
-  if (!context.match) throw new Error("没有进行中的赛事，不能导入");
+  if (!context.match) throw new Error("没有可写入的赛事，不能导入");
 
   const { creds } = await readCredentials();
   if (!creds) throw new Error("没有连接到英雄联盟客户端");
