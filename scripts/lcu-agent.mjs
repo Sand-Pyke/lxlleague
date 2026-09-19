@@ -603,6 +603,14 @@ async function scanOnce(creds) {
     return 0;
   }
 
+  const targetRound = ROUND || context.match.currentRound;
+  const roundTitleOf = (no) =>
+    (context.match.rounds ?? []).find((round) => round.no === no)?.title ?? `第 ${no} 轮`;
+  if (context.match.status === "FINISHED" && !ROUND) {
+    warn(`⚠ 目标赛事「${context.match.name}」已结束，且未指定 --round，默认写入「${roundTitleOf(targetRound)}」。`);
+    warn("  补录请加 --round N 指定场次（例如 --round 2 表示半决赛），或改用 --ui 在导入台里逐局选择场次。");
+  }
+
   const summoner = await lcuRequest(creds, "GET", "/lol-summoner/v1/current-summoner");
   const puuid = summoner?.puuid;
   if (!puuid) {
@@ -652,7 +660,7 @@ async function scanOnce(creds) {
     const payload = {
       sourceGameId: gameId,
       matchId: context.match.id,
-      roundNo: ROUND || context.match.currentRound,
+      roundNo: targetRound,
       // 不传 gameNo：由服务端排到该赛事的下一个空位。agent 无从得知这是 BO5 的第几局，
       // 而同一局的重复上传会靠 sourceGameId 命中唯一键、只刷新数据不动槽位。
       playedAt: new Date(detail.gameCreation ?? Date.now()).toISOString(),
@@ -954,7 +962,9 @@ const localUiHtml = `<!doctype html>
         byId("lcuState").textContent = data.lcu.connected ? "LCU 已连接" : "LCU 未连接";
         byId("lcuState").className = "pill " + (data.lcu.connected ? "ok" : "warn");
         const matchLabel = context.match?.status === "FINISHED" ? "已结束" : "进行中";
-        byId("context").innerHTML = context.match ? '<strong>' + escape(context.match.name) + '</strong><div class="meta"><span class="pill ' + (context.match.status === "FINISHED" ? "" : "ok") + '">' + matchLabel + '</span><span class="pill">第 ' + context.match.currentRound + ' 轮</span><span class="pill">BO' + context.match.bo + '</span><span class="pill">已报名 ' + context.players.length + ' 人</span></div><p style="margin-top:12px">写入目标由服务端固定为当前可写入的赛事和轮次，已结束的赛事可用于补录战绩。</p>' : '<div class="empty">服务端没有可写入的赛事。请先在管理后台把目标赛事设为「进行中」，或选择一场已结束的赛事补录。</div>';
+        const currentRoundTitle = (context.match?.rounds ?? []).find((round) => round.no === context.match.currentRound)?.title ?? "";
+        const roundPill = '第 ' + context.match.currentRound + ' 轮' + (currentRoundTitle ? ' · ' + currentRoundTitle : '');
+        byId("context").innerHTML = context.match ? '<strong>' + escape(context.match.name) + '</strong><div class="meta"><span class="pill ' + (context.match.status === "FINISHED" ? "" : "ok") + '">' + matchLabel + '</span><span class="pill">' + roundPill + '</span><span class="pill">BO' + context.match.bo + '</span><span class="pill">已报名 ' + context.players.length + ' 人</span></div><p style="margin-top:12px">写入目标由服务端固定为当前可写入的赛事和轮次，已结束的赛事可用于补录战绩。</p>' : '<div class="empty">服务端没有可写入的赛事。请先在管理后台把目标赛事设为「进行中」，或选择一场已结束的赛事补录。</div>';
         const games = data.games || [];
         byId("gameCount").textContent = games.length + " 局";
         byId("games").innerHTML = games.length ? games.map((game) => '<button class="game ' + (state.selected === game.id ? 'active' : '') + '" data-game="' + escape(game.id) + '"><strong>' + gameTime(game.playedAt) + '</strong><small>对局 ' + escape(game.id) + ' · 队列 ' + escape(game.queueId) + ' · 匹配 ' + game.matchedCount + ' / ' + game.players.length + ' 人</small></button>').join("") : '<div class="empty">没有可读取的对局历史。</div>';
@@ -966,9 +976,9 @@ const localUiHtml = `<!doctype html>
         const target = byId("preview"); const badge = byId("previewState");
         if (!game) { badge.textContent = "请选择一局"; badge.className = "pill warn"; target.innerHTML = '<div class="empty">选中右侧对局后，这里会显示全部 10 名参与者及本站账号匹配结果。</div>'; return; }
         badge.textContent = "已匹配 " + game.matchedCount + " 人"; badge.className = "pill " + (game.matchedCount >= state.data.policy.minPlayers ? "ok" : "warn");
-        const totalRounds = state.data?.context?.match?.totalRounds ?? 1;
+        const rounds = state.data?.context?.match?.rounds ?? [];
         const currentRound = state.data?.context?.match?.currentRound ?? 1;
-        const roundSelect = '<label>轮次 <select id="roundNo">' + Array.from({ length: totalRounds }, (_, i) => '<option value="' + (i + 1) + '"' + (i + 1 === currentRound ? ' selected' : '') + '>第 ' + (i + 1) + ' 轮</option>').join("") + '</select></label>';
+        const roundSelect = '<label>场次 <select id="roundNo">' + (rounds.length ? rounds.map((round) => '<option value="' + round.no + '"' + (round.no === currentRound ? ' selected' : '') + '>第 ' + round.no + ' 轮 · ' + round.title + '</option>').join("") : '<option value="' + currentRound + '">第 ' + currentRound + ' 轮</option>') + '</select></label>';
         const rows = game.players.map((player) => '<tr><td>' + escape(player.team === 100 ? '蓝方' : player.team === 200 ? '红方' : '队伍 ' + player.team) + '</td><td>' + escape(player.name) + '</td><td>' + escape(player.champion || '-') + '</td><td>' + escape(player.result === 'win' ? '胜' : '负') + '</td><td>' + player.kills + ' / ' + player.deaths + ' / ' + player.assists + '</td><td>' + player.cs + '</td><td>' + (player.matched ? '<span class="matched">' + escape(player.username) + '</span>' : '<span class="unmatched">未匹配</span>') + '</td></tr>').join("");
         target.innerHTML = '<div class="summary"><span class="pill">队列 ' + escape(game.queueId) + '</span><span class="pill">对局时间 ' + gameTime(game.playedAt) + '</span>' + roundSelect + '<label>局号 <select id="gameNo"><option value="">自动分配</option>' + Array.from({length: 5}, (_, i) => '<option value="' + (i + 1) + '">第 ' + (i + 1) + ' 局</option>').join("") + '</select></label><span class="muted">至少匹配 ' + state.data.policy.minPlayers + ' 名本站选手才允许导入</span></div><div class="table-wrap"><table><thead><tr><th>阵营</th><th>游戏 ID</th><th>英雄</th><th>结果</th><th>K / D / A</th><th>CS</th><th>本站账号</th></tr></thead><tbody>' + rows + '</tbody></table></div><div class="actions"><span class="muted">导入后可在后台战绩录入中补充 MVP、SVP 与队内名次。</span><button id="import" ' + (state.busy || !state.data.context.match || game.matchedCount < state.data.policy.minPlayers ? 'disabled' : '') + '>确认导入本局</button></div>';
         const button = byId("import"); if (button) button.onclick = importSelected;

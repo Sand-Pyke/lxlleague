@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { roundTitle } from "@/lib/round-title";
 import { ApiError } from "@/server/api";
 import { normalizeImportedRow, upsertGameRecords } from "@/server/records";
 
@@ -102,6 +103,10 @@ export async function importContext(request: NextRequest) {
             status: match.status,
             currentRound: match.currentRound,
             totalRounds,
+            rounds: Array.from({ length: totalRounds }, (_, index) => {
+              const no = index + 1;
+              return { no, title: roundTitle(no, totalRounds) };
+            }),
             bo: match.bo,
           }
         : null,

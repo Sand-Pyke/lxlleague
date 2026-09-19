@@ -750,6 +750,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
             matchId={selected.id}
             signs={board?.signs ?? []}
             currentRound={selected.currentRound}
+            totalRounds={board?.match.total_rounds ?? 0}
           />
         ) : null}
       </Drawer>

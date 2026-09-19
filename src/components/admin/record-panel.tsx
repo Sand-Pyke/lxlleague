@@ -28,6 +28,7 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { POSITION_OPTIONS, positionText } from "@/lib/admin-options";
+import { roundTitle } from "@/lib/round-title";
 import {
   championIcon,
   championOptions,
@@ -154,10 +155,12 @@ export function RecordPanel({
   matchId,
   signs,
   currentRound,
+  totalRounds,
 }: {
   matchId: number;
   signs: RosterSign[];
   currentRound?: number;
+  totalRounds?: number;
 }) {
   const [rows, setRows] = useState<RecordRow[]>([]);
   const [users, setUsers] = useState<AdminUserOption[]>([]);
@@ -172,6 +175,7 @@ export function RecordPanel({
   const [editTarget, setEditTarget] = useState<RecordRow | null>(null);
   const [editDraft, setEditDraft] = useState<RowDraft | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
+  const [roundFilter, setRoundFilter] = useState<number>(0);
 
   // 自动导入（LCU agent）用的令牌：只存在管理员自己身上，可重置。
   const [importToken, setImportToken] = useState("");
@@ -268,6 +272,24 @@ export function RecordPanel({
     }
     return users.map((user) => ({ value: user.id, label: user.username }));
   }, [signs, useSignups, users]);
+
+  const maxRound =
+    totalRounds && totalRounds > 0
+      ? totalRounds
+      : Math.max(...rows.map((row) => row.round_no), 1);
+
+  const roundOptions = useMemo(
+    () =>
+      [...new Set(rows.map((row) => row.round_no))]
+        .sort((a, b) => a - b)
+        .map((no) => ({ value: no, label: roundTitle(no, maxRound) })),
+    [rows, maxRound],
+  );
+
+  const shownRows = useMemo(
+    () => (roundFilter ? rows.filter((row) => row.round_no === roundFilter) : rows),
+    [rows, roundFilter],
+  );
 
   async function run(action: () => Promise<Record<string, unknown>>, fallback: string) {
     setBusy(true);
@@ -535,7 +557,13 @@ export function RecordPanel({
 
   const recordColumns: ColumnsType<RecordRow> = [
     { title: "局", dataIndex: "game_no", key: "game_no", width: 60 },
-    { title: "轮", dataIndex: "round_no", key: "round_no", width: 60 },
+    {
+      title: "场次",
+      dataIndex: "round_no",
+      key: "round_no",
+      width: 120,
+      render: (_, row) => roundTitle(row.round_no, maxRound),
+    },
     {
       title: "玩家",
       dataIndex: "game_name",
@@ -767,6 +795,9 @@ export function RecordPanel({
               value={roundNo}
               onChange={(value) => setRoundNo(Number(value) || 1)}
             />
+            <Typography.Text type="secondary" style={{ marginLeft: 6 }}>
+              {roundTitle(roundNo, maxRound)}
+            </Typography.Text>
           </span>
           <span>
             日期{" "}
@@ -849,18 +880,32 @@ export function RecordPanel({
             <Spin />
           </div>
         ) : rows.length ? (
-          <Table
-            rowKey="id"
-            size="small"
-            columns={recordColumns}
-            dataSource={rows}
-            rowSelection={{
-              selectedRowKeys,
-              onChange: (keys) => setSelectedRowKeys(keys as number[]),
-            }}
-            pagination={{ pageSize: 10, showSizeChanger: false }}
-            scroll={{ x: 1320 }}
-          />
+          <>
+            <Space style={{ marginBottom: 12 }} wrap>
+              <Typography.Text type="secondary">按场次筛选：</Typography.Text>
+              <Select
+                size="small"
+                style={{ width: 180 }}
+                allowClear
+                placeholder="全部场次"
+                value={roundFilter || undefined}
+                options={roundOptions}
+                onChange={(value) => setRoundFilter(value ? Number(value) : 0)}
+              />
+            </Space>
+            <Table
+              rowKey="id"
+              size="small"
+              columns={recordColumns}
+              dataSource={shownRows}
+              rowSelection={{
+                selectedRowKeys,
+                onChange: (keys) => setSelectedRowKeys(keys as number[]),
+              }}
+              pagination={{ pageSize: 10, showSizeChanger: false }}
+              scroll={{ x: 1320 }}
+            />
+          </>
         ) : (
           <Empty description="还没有录入战绩" />
         )}

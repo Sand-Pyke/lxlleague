@@ -63,6 +63,7 @@ export type TeamsBoard = {
     status: string;
     use_fee: boolean;
     bo: string;
+    total_rounds: number;
   };
   teams: RosterTeam[];
   signs: RosterSign[];

@@ -257,6 +257,7 @@ export async function teamsBoard(matchId: number) {
       status: match.status,
       use_fee: useFee,
       bo: match.bo || "BO1",
+      total_rounds: isBracketTeamCount(teams.length) ? totalRoundsFor(teams.length) : 1,
     },
     teams: teams.map((team) => ({
       id: team.id,
