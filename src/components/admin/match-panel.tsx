@@ -5,6 +5,7 @@ import {
   Alert,
   Button,
   Card,
+  DatePicker,
   Drawer,
   Empty,
   Input,
@@ -21,6 +22,7 @@ import {
   message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Match } from "@/lib/data";
 import {
@@ -39,9 +41,16 @@ import { RosterPanel, type TeamsBoard } from "./roster-panel";
 
 type MatchRow = Match & { player_count: number; team_count: number; live_url: string };
 
-type MatchForm = { name: string; bo: string; round: string; status: MatchStatus; useFee: boolean };
+type MatchForm = {
+  name: string;
+  bo: string;
+  round: string;
+  status: MatchStatus;
+  useFee: boolean;
+  date: Dayjs | null;
+};
 
-const emptyForm: MatchForm = { name: "", bo: "BO1", round: "常规赛", status: "CREATED", useFee: true };
+const emptyForm: MatchForm = { name: "", bo: "BO1", round: "常规赛", status: "CREATED", useFee: true, date: null };
 
 export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
   const [matches, setMatches] = useState<MatchRow[]>([]);
@@ -154,7 +163,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
         <Space orientation="vertical" size={0}>
           <Typography.Text strong>{match.name}</Typography.Text>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {match.round} · {new Date(match.date).toLocaleDateString("zh-CN")}
+            {match.round} · {match.date ? new Date(match.date).toLocaleString("zh-CN") : "时间待定"}
           </Typography.Text>
         </Space>
       ),
@@ -325,6 +334,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
                     round: selected.round,
                     status: selected.status,
                     useFee: selected.useFee,
+                    date: selected.date ? dayjs(selected.date) : null,
                   })
                 }
               >
@@ -477,6 +487,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
                 round: createForm.round,
                 status: createForm.status,
                 use_fee: createForm.useFee,
+                date: createForm.date ? createForm.date.toISOString() : null,
               }),
             "比赛已创建",
           ).then((succeeded) => {
@@ -517,6 +528,14 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
             value={createForm.round}
             onChange={(event) => setCreateForm({ ...createForm, round: event.target.value })}
           />
+          <DatePicker
+            showTime
+            format="YYYY-MM-DD HH:mm"
+            placeholder="比赛时间（可选，用于首页今日赛事展示）"
+            style={{ width: "100%" }}
+            value={createForm.date}
+            onChange={(value) => setCreateForm({ ...createForm, date: value })}
+          />
         </Space>
       </Modal>
 
@@ -536,6 +555,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
                 name: form.name,
                 round: form.round,
                 status: form.status,
+                date: form.date ? form.date.toISOString() : null,
               }),
             "比赛信息已更新",
           ).then((succeeded) => {
@@ -557,6 +577,14 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
               maxLength={40}
               value={editForm.round}
               onChange={(event) => setEditForm({ ...editForm, round: event.target.value })}
+            />
+            <DatePicker
+              showTime
+              format="YYYY-MM-DD HH:mm"
+              placeholder="比赛时间（可选，用于首页今日赛事展示）"
+              style={{ width: "100%" }}
+              value={editForm.date}
+              onChange={(value) => setEditForm({ ...editForm, date: value })}
             />
             <Select
               style={{ width: "100%" }}

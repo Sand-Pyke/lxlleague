@@ -62,7 +62,8 @@ model PlayerProfile {
 model Match {
   id           Int               @id @default(autoincrement())
   name         String
-  date         DateTime
+  /// 赛事排期时间：可选，设置后展示在首页「今日赛事」；未设置为空。
+  date         DateTime?
   status       MatchStatus       @default(CREATED)
   bo           String            @default("BO3")
   playerCount  Int               @default(0)

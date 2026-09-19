@@ -46,7 +46,8 @@ export type Player = {
 export type Match = {
   id: number;
   name: string;
-  date: string;
+  /** 排期时间（可选）：未设置时为 null，展示为「时间待定」。 */
+  date: string | null;
   status: "CREATED" | "LIVE" | "FINISHED";
   bo: string;
   playerCount: number;

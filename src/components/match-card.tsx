@@ -13,7 +13,7 @@ export function MatchCardBody({ match }: { match: Match }) {
       <div className="card-top">
         <Status status={match.status} />
         <span className="bo">{match.bo}</span>
-        <time dateTime={match.date}>{formatMatchDate(match.date)}</time>
+        <time dateTime={match.date ?? undefined}>{formatMatchDate(match.date)}</time>
       </div>
       <h3>{match.name}</h3>
       <div className="match-meta">

@@ -205,10 +205,19 @@ export async function getHomeBoardV2() {
  * 不再只认 FINISHED——进行中的赛事只要某轮比分已经录入，同样算作“赛果”。
  */
 export async function homeRecentResults(limit = 5): Promise<RecentResult[]> {
-  const matches = await prisma.match.findMany({
-    orderBy: [{ date: "desc" }, { id: "desc" }],
-    take: limit,
+  const rows = await prisma.match.findMany({
+    orderBy: { id: "desc" },
+    take: Math.max(limit * 4, 20),
   });
+  // date 可空：Postgres 对 DESC 排序会把 NULL 排最前，这里改成 JS 内排序，
+  // 让「没设排期时间的赛事」沉底，不挤占最近赛果的位置。
+  rows.sort((a, b) => {
+    const da = a.date?.getTime() ?? Number.NEGATIVE_INFINITY;
+    const db = b.date?.getTime() ?? Number.NEGATIVE_INFINITY;
+    if (da === db) return b.id - a.id;
+    return db - da;
+  });
+  const matches = rows.slice(0, limit);
   if (!matches.length) return [];
 
   const matchIds = matches.map((match) => match.id);

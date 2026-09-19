@@ -98,7 +98,7 @@ export async function getMatchDetail(request: NextRequest, id: string | number) 
     match: {
       id: match.id,
       name: match.name,
-      date: match.date.toISOString(),
+      date: match.date?.toISOString() ?? null,
       status: match.status,
       player_count: match.playerCount,
       team_count: match.teamCount,
@@ -472,7 +472,7 @@ export async function getMatchResultData(id: string | number, options: MatchResu
       match: {
         id: match.id,
         name: match.name,
-        date: match.date.toISOString(),
+        date: match.date?.toISOString() ?? null,
         status: match.status,
         bo: match.bo || "BO1",
         current_round: liveRound,

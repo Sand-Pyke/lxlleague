@@ -8,7 +8,7 @@ export function matchFrom(match: DbMatch, signed = false): Match {
   return {
     id: match.id,
     name: match.name,
-    date: match.date.toISOString(),
+    date: match.date?.toISOString() ?? null,
     status: match.status,
     bo: match.bo,
     playerCount: match.playerCount,

@@ -28,6 +28,13 @@ import { listMatchRecords } from "@/server/records";
 
 const asText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 
+/** 把前端传来的可空排期时间（ISO 字符串）解析成 Date；未传/空串/非法一律返回 null。 */
+function parseMatchDate(value: unknown): Date | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 async function requireMatch(matchId: number) {
   const match = await prisma.match.findUnique({ where: { id: matchId } });
   if (!match) throw notFound("赛事不存在");
@@ -51,7 +58,7 @@ export async function createMatch(body: Record<string, unknown>) {
       bo,
       round: round.slice(0, 40),
       useFee: body.use_fee === undefined ? true : Boolean(body.use_fee),
-      date: new Date(),
+      date: parseMatchDate(body.date),
       playerCount: 0,
       teamCount: 0,
     },
@@ -62,7 +69,12 @@ export async function createMatch(body: Record<string, unknown>) {
 export async function updateMatch(matchId: number, body: Record<string, unknown>) {
   const match = await requireMatch(matchId);
   const started = match.status !== "CREATED";
-  const data: { name?: string; status?: (typeof MATCH_STATUSES)[number]; round?: string } = {};
+  const data: {
+    name?: string;
+    status?: (typeof MATCH_STATUSES)[number];
+    round?: string;
+    date?: Date | null;
+  } = {};
   const name = asText(body.name);
   if (name && name !== match.name) {
     if (started) throw badRequest("比赛已开始，名称不可再修改");
@@ -72,6 +84,8 @@ export async function updateMatch(matchId: number, body: Record<string, unknown>
     data.status = body.status as (typeof MATCH_STATUSES)[number];
   const round = asText(body.round);
   if (round) data.round = round.slice(0, 40);
+  // 排期时间可设置、可清空：传空串或 null 即清除，仅在该字段出现时更新。
+  if (body.date !== undefined) data.date = parseMatchDate(body.date);
   await prisma.match.update({ where: { id: matchId }, data });
   return { msg: "比赛信息已更新" };
 }

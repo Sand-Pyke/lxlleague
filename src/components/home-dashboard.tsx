@@ -80,11 +80,14 @@ export function HomeDashboard({ matches, players, recent }: Props) {
   // 「今日赛事」最多放两场：进行中的优先，其余按时间升序；其余赛事走「查看全部」。
   const featuredMatches = matches
     .filter((match) => match.status !== "FINISHED")
-    .sort(
-      (a, b) =>
-        Number(b.status === "LIVE") - Number(a.status === "LIVE") ||
-        a.date.localeCompare(b.date),
-    )
+    .sort((a, b) => {
+      const liveDiff = Number(b.status === "LIVE") - Number(a.status === "LIVE");
+      if (liveDiff) return liveDiff;
+      // 设置了排期时间的排前面，未设置的沉底。
+      const aTime = a.date ? new Date(a.date).getTime() : Number.MAX_SAFE_INTEGER;
+      const bTime = b.date ? new Date(b.date).getTime() : Number.MAX_SAFE_INTEGER;
+      return aTime - bTime;
+    })
     .slice(0, 2);
   const finishedMatchCount = matches.filter((match) => match.status === "FINISHED").length;
   // 「活跃赛事」= 尚未结束的赛事（报名中/进行中），与「当前赛事」页签口径一致。
