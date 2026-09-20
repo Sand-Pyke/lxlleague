@@ -3304,6 +3304,186 @@ body {
   }
 }
 
+/* 视频内容模块：卡片网格，播放器占满卡片宽度，标题/简介/元信息在下方。 */
+.video-gallery-loading {
+  display: grid;
+  min-height: 240px;
+  place-items: center;
+}
+
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 18px;
+}
+
+.video-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--league-border);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.3);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.video-card:hover {
+  border-color: rgba(139, 92, 246, 0.55);
+  box-shadow: var(--league-shadow);
+}
+
+.video-card__cover {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: #000;
+  cursor: pointer;
+}
+
+.video-card__thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.92;
+  transition:
+    transform 0.25s ease,
+    opacity 0.25s ease;
+}
+
+.video-card__cover:hover .video-card__thumb {
+  transform: scale(1.05);
+  opacity: 1;
+}
+
+.video-card__play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 52px;
+  text-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.3), transparent 72%);
+  transition: transform 0.2s ease;
+}
+
+.video-card__cover:hover .video-card__play {
+  transform: scale(1.12);
+}
+
+.video-card__body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+}
+
+.video-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.video-card__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(139, 92, 246, 0.18);
+  color: var(--violet);
+  font-size: 14px;
+}
+
+.video-card__title.ant-typography {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+  color: var(--league-text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.video-card__desc.ant-typography {
+  margin-bottom: 0;
+  color: var(--league-muted);
+  font-size: 13px;
+}
+
+.video-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--league-muted);
+  font-size: 12px;
+}
+
+.video-upload-file.ant-typography {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+/* 播放弹窗：深色容器衬托播放器，原生控件自带全屏/暂停/音量。 */
+.video-player-modal .ant-modal-content {
+  overflow: hidden;
+  padding: 12px;
+  background: #0b1020;
+}
+
+.video-player-modal .ant-modal-header {
+  margin-bottom: 10px;
+  background: transparent;
+}
+
+.video-player-modal__video {
+  display: block;
+  width: 100%;
+  /* 固定播放区域高度：视频无论宽扁还是竖版都按 contain 居中呈现，
+     避免宽扁视频按原始比例把画面压得很矮。 */
+  height: min(70vh, 560px);
+  min-height: 380px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #000;
+}
+
+/* 上传弹窗的拖拽选择区：边框/底色跟随主题。 */
+.video-upload-dragger .ant-upload-drag {
+  border-color: var(--league-border);
+  background: rgba(15, 23, 42, 0.25);
+}
+
+:root[data-theme="light"] .video-upload-dragger .ant-upload-drag {
+  background: rgba(79, 70, 229, 0.04);
+}
+
+/* 浅色主题：视频卡片底色换浅色，其余颜色走主题变量已自适应。 */
+:root[data-theme="light"] .video-card {
+  background: rgba(79, 70, 229, 0.04);
+}
+
+@media (max-width: 640px) {
+  .video-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* 赛季数据的 8 块格子平分多出来的高度，表现为「格子变高」而不是「下方留白」。 */
 .prof-main > .ant-card:last-child .prof-stats {
   flex: 1;

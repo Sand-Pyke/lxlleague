@@ -49,6 +49,10 @@ Reading stays compatible either way:
 
 The AccessKey should be scoped to just that bucket (PutObject, GetObject, HeadObject, ListObjects, DeleteObject) via a RAM policy. `OSS_PREFIX` optionally namespaces the object keys when the bucket is shared with other applications.
 
+### Videos
+
+Admins can publish videos (`/videos` page, "比赛视频") — match highlights and other official content. Uploads accept `mp4`/`webm` up to `MAX_VIDEO_MB` (default 200) and are stored the same way as images: OSS when configured, `UPLOAD_DIR/videos` otherwise. Playback uses the app's `/assets/videos/*` endpoint, which supports HTTP Range streaming (seek works), or a `307` to OSS when `OSS_PUBLIC_BASE_URL` is set. Raw files are served as uploaded (no transcoding) — H.264/AAC mp4 or VP8/VP9 webm are recommended for browser compatibility.
+
 ## Gitee workflow
 
 The checked-in Gitee Go workflow uses Node 20 to generate Prisma Client, type-check, build and package the release. The deployment agent then validates the production Compose file, starts PostgreSQL, creates a pre-deployment SQL backup, builds the application image and waits for `/api/health` to confirm both the application and database are available.

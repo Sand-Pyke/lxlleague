@@ -1,5 +1,7 @@
-import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
 import OSS from "ali-oss";
 
@@ -16,7 +18,7 @@ import OSS from "ali-oss";
  * 因此数据库里现有的 /assets/... 路径完全不用迁移。
  */
 
-export type UploadKind = "avatars" | "user-bg";
+export type UploadKind = "avatars" | "user-bg" | "videos";
 
 const IMAGE_TYPES: Record<string, string> = {
   ".jpg": "image/jpeg",
@@ -84,8 +86,8 @@ function ossKey(kind: UploadKind, name: string) {
   return prefix ? `${prefix}/${kind}/${name}` : `${kind}/${name}`;
 }
 
-/** 写入一张上传图片：配置了 OSS 就直传，否则落本地磁盘。 */
-export async function putUploadedImage(
+/** 写入一个存储对象（图片/视频通用）：配置了 OSS 就直传，否则落本地磁盘。 */
+export async function putStoredObject(
   kind: UploadKind,
   name: string,
   buffer: Buffer,
@@ -104,6 +106,19 @@ export async function putUploadedImage(
   const dir = uploadDir(kind);
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, name), buffer);
+}
+
+/** 图片上传入口（语义别名，保持调用方可读性）。 */
+export const putUploadedImage = putStoredObject;
+
+/** 删除一个存储对象：OSS 或本地磁盘，失败静默（清理场景不阻塞主流程）。 */
+export async function deleteStoredObject(kind: UploadKind, name: string) {
+  const client = ossClient();
+  if (client) {
+    await client.delete(ossKey(kind, name)).catch(() => undefined);
+    return;
+  }
+  await unlink(path.join(uploadDir(kind), name)).catch(() => undefined);
 }
 
 /** OSS 上是否已存在该文件（用于公网直跳前的存在性检查）。 */
@@ -182,6 +197,116 @@ export async function serveUploadedImage(kind: UploadKind, name: string) {
       "Content-Type": file.contentType,
       "Content-Length": String(file.buffer.byteLength),
       "Cache-Control": "public, max-age=31536000, immutable",
+    },
+  });
+}
+
+/* ------------------------------- 视频读取 ------------------------------- */
+
+/** 视频文件名：`v<时间戳>_<随机串>.(mp4|webm)`，与图片规则一样杜绝目录穿越。 */
+const VIDEO_NAME = /^v\d+_[a-f0-9]+\.(mp4|webm)$/;
+
+function videoContentType(name: string) {
+  return name.endsWith(".webm") ? "video/webm" : "video/mp4";
+}
+
+type VideoSource = {
+  total: number;
+  /** 读取 [start, end] 字节区间的 Web 流（OSS 分支为异步）。 */
+  readRange: (
+    start: number,
+    end: number,
+  ) => ReadableStream<Uint8Array> | Promise<ReadableStream<Uint8Array>>;
+};
+
+async function resolveVideoSource(name: string): Promise<VideoSource | null> {
+  const client = ossClient();
+  if (client) {
+    const head = await client.head(ossKey("videos", name)).catch(() => null);
+    const total = Number(head?.res.headers["content-length"] ?? 0);
+    if (total > 0) {
+      return {
+        total,
+        readRange: async (start, end) => {
+          const result = await client.get(ossKey("videos", name), {
+            headers: { Range: `bytes=${start}-${end}` },
+          });
+          return new Blob([Buffer.from(result.content)]).stream();
+        },
+      };
+    }
+  }
+  const filePath = path.join(uploadDir("videos"), name);
+  const info = await stat(filePath).catch(() => null);
+  if (!info || !info.isFile()) return null;
+  return {
+    total: info.size,
+    readRange: (start, end) =>
+      Readable.toWeb(createReadStream(filePath, { start, end })) as ReadableStream<Uint8Array>,
+  };
+}
+
+function rangeNotSatisfiable(total: number) {
+  return new NextResponse("Range Not Satisfiable", {
+    status: 416,
+    headers: { "Content-Range": `bytes */${total}` },
+  });
+}
+
+/** 解析 `Range: bytes=start-end`（仅支持单段），返回 [start, end]，非法时抛 416。 */
+function parseRange(rangeHeader: string, total: number): [number, number] | null {
+  if (!rangeHeader) return null;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
+  if (!match) throw rangeNotSatisfiable(total);
+  const [, startText, endText] = match;
+  if (startText === "" && endText === "") throw rangeNotSatisfiable(total);
+  if (startText === "") {
+    // 后缀范围：取最后 N 字节。
+    const suffix = Number(endText);
+    if (!Number.isSafeInteger(suffix) || suffix <= 0) throw rangeNotSatisfiable(total);
+    const start = Math.max(total - suffix, 0);
+    return [start, total - 1];
+  }
+  const start = Number(startText);
+  const end = endText === "" ? total - 1 : Math.min(Number(endText), total - 1);
+  if (!Number.isSafeInteger(start) || start >= total || end < start) {
+    throw rangeNotSatisfiable(total);
+  }
+  return [start, end];
+}
+
+/** 视频播放：支持 Range 分段拉流（HTML5 video 拖动进度条依赖它），配了公网地址时 307 直跳。 */
+export async function serveVideo(name: string, rangeHeader: string | null) {
+  if (!VIDEO_NAME.test(name)) return new NextResponse("Not Found", { status: 404 });
+  const publicBase = process.env.OSS_PUBLIC_BASE_URL?.replace(/\/+$/, "");
+  if (publicBase && (await ossHasObject(ossKey("videos", name)))) {
+    return NextResponse.redirect(`${publicBase}/videos/${name}`, 307);
+  }
+  const source = await resolveVideoSource(name);
+  if (!source) return new NextResponse("Not Found", { status: 404 });
+
+  const contentType = videoContentType(name);
+  const common = {
+    "Content-Type": contentType,
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "public, max-age=31536000, immutable",
+  };
+
+  let range: [number, number];
+  try {
+    const parsed = parseRange(rangeHeader ?? "", source.total);
+    range = parsed ?? [0, source.total - 1];
+  } catch (error) {
+    return error as NextResponse;
+  }
+
+  const [start, end] = range;
+  return new NextResponse(await source.readRange(start, end), {
+    status: rangeHeader ? 206 : 200,
+    headers: {
+      ...common,
+      "Content-Length": String(end - start + 1),
+      ...(rangeHeader ? { "Content-Range": `bytes ${start}-${end}/${source.total}` } : {}),
     },
   });
 }

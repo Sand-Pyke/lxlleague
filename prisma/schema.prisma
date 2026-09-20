@@ -213,3 +213,15 @@ model CommunityComment {
   @@index([createdAt])
   @@index([parentId])
 }
+
+model Video {
+  id          Int      @id @default(autoincrement())
+  title       String   @db.VarChar(100)
+  description String?  @db.VarChar(500)
+  objectKey   String   @unique
+  mimeType    String   @db.VarChar(64)
+  size        Int
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}

@@ -45,7 +45,7 @@ declare module "ali-oss" {
       content: Buffer | string,
       options?: PutOptions,
     ): Promise<{ name: string; url: string; res: { status: number } }>;
-    get(name: string): Promise<GetResult>;
+    get(name: string, options?: { headers?: Record<string, string> }): Promise<GetResult>;
     head(name: string): Promise<HeadResult>;
     delete(name: string): Promise<{ res: { status: number } }>;
     list(query: ListQuery, options?: unknown): Promise<ListResult>;

@@ -11,6 +11,7 @@ import {
   TeamOutlined,
   TrophyOutlined,
   UserOutlined,
+  VideoCameraOutlined,
 } from "@ant-design/icons";
 import { Avatar, Button, Dropdown, Layout, Space, Tag, Tooltip, Typography } from "antd";
 import Link from "next/link";
@@ -26,6 +27,7 @@ const navigation: NavItem[] = [
   { key: "/matches", text: "比赛", icon: <TrophyOutlined /> },
   { key: "/players", text: "选手", icon: <TeamOutlined /> },
   { key: "/rankings", text: "排行", icon: <OrderedListOutlined /> },
+  { key: "/videos", text: "视频", icon: <VideoCameraOutlined /> },
   { key: "/profile", text: "个人", icon: <UserOutlined /> },
   { key: "/community", text: "社区", icon: <MessageOutlined /> },
 ];
