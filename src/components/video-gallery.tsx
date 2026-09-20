@@ -151,6 +151,8 @@ export function VideoGallery() {
         ossBody.append("policy", policyData.policy);
         ossBody.append("OSSAccessKeyId", policyData.accessKeyId);
         ossBody.append("signature", policyData.signature);
+        // policy 里有「$Content-Type 等于 mimeType」的条件，这里必须显式带上该表单字段。
+        ossBody.append("Content-Type", policyData.mimeType);
         ossBody.append("file", file);
         const ossResponse = await fetch(policyData.host, { method: "POST", body: ossBody });
         if (!ossResponse.ok) throw new Error("上传到 OSS 失败，请重试");
