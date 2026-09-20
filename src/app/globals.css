@@ -3087,6 +3087,17 @@ body {
   gap: 16px;
 }
 
+/* 标题旁的发言须知图标：默认弱化，悬停时换成主题强调色并显示提示气泡。 */
+.community-info-icon {
+  font-size: 14px;
+  color: var(--league-muted);
+  cursor: pointer;
+}
+
+.community-info-icon:hover {
+  color: var(--violet);
+}
+
 .community-post {
   min-width: 0;
 }

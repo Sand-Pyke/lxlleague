@@ -1,7 +1,13 @@
 "use client";
 
-import { DeleteOutlined, EditOutlined, MessageOutlined, UserOutlined } from "@ant-design/icons";
-import { Button, Card, Empty, Input, Popconfirm, Space, Typography, message } from "antd";
+import {
+  DeleteOutlined,
+  EditOutlined,
+  InfoCircleOutlined,
+  MessageOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
+import { Button, Card, Empty, Input, Popconfirm, Space, Tooltip, Typography, message } from "antd";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { errorText } from "@/components/admin/api-client";
@@ -289,7 +295,14 @@ export function CommunityCard() {
   return (
     <Card
       className="antd-panel community-card"
-      title="用户社区"
+      title={
+        <Space size={6}>
+          用户社区
+          <Tooltip title="匿名发言形式为匿名，希望大家文明发言，不要引战谩骂；如出现人身攻击，管理员会删除相关内容。">
+            <InfoCircleOutlined className="community-info-icon" aria-label="社区发言须知" />
+          </Tooltip>
+        </Space>
+      }
       extra={
         viewer ? (
           <Button
