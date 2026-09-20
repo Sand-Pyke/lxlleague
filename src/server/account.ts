@@ -1,4 +1,3 @@
-import { mkdir, readdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
@@ -11,7 +10,12 @@ import { MAX_FAVORITE_HEROES, formatFavoriteHeroes } from "@/lib/favorite-heroes
 import { canonicalChampionName } from "@/lib/game-assets";
 import { passwordFormatError, usernameFormatError } from "@/lib/credentials";
 import { getSessionUser, isCoreAdminUsername } from "@/server/auth";
-import { IMAGE_EXTS, uploadDir } from "@/server/uploads";
+import {
+  IMAGE_EXTS,
+  imageContentType,
+  putUploadedImage,
+  removeOldUploads,
+} from "@/server/uploads";
 
 /**
  * 选手自助资料端点（对应旧项目 app.py 里的 /api/user/* 与 /api/avatar/upload）。
@@ -82,16 +86,6 @@ async function readUpload(file: unknown): Promise<Upload> {
   const buffer = Buffer.from(await file.arrayBuffer());
   if (!isRealImage(buffer)) return { ok: false, error: "文件不是有效图片" };
   return { ok: true, buffer, ext };
-}
-
-/** 同一个人的旧图片只留一张：删掉目录里属于该用户的历史文件。 */
-async function removeOldFiles(dir: string, keep: string, isOwn: (name: string) => boolean) {
-  const names = await readdir(dir).catch(() => [] as string[]);
-  await Promise.all(
-    names
-      .filter((name) => name !== keep && isOwn(name))
-      .map((name) => unlink(path.join(dir, name)).catch(() => undefined)),
-  );
 }
 
 /** 带时间戳的新命名（u3_1789...jpg）与旧命名（u3.jpg）都算这个用户自己的文件。 */
@@ -278,18 +272,16 @@ export async function changeUsername(request: NextRequest) {
   return message("账户ID修改成功，下次请用新账户ID登录");
 }
 
-/** 头像上传：文件名带时间戳，URL 变化让浏览器自然换新缓存。 */
+/** 头像上传：文件名带时间戳，URL 变化让浏览器自然换新缓存。配置了 OSS 时直传 OSS。 */
 export async function uploadAvatar(request: NextRequest) {
   const userId = await currentUserId(request);
   if (!userId) return message("请先登录", 401);
   const form = await request.formData().catch(() => null);
   const upload = await readUpload(form?.get("avatar"));
   if (!upload.ok) return message(upload.error, 400);
-  const dir = uploadDir("avatars");
-  await mkdir(dir, { recursive: true });
   const name = `u${userId}_${Date.now()}${upload.ext}`;
-  await writeFile(path.join(dir, name), upload.buffer);
-  await removeOldFiles(dir, name, (candidate) => isOwnUpload(candidate, userId));
+  await putUploadedImage("avatars", name, upload.buffer, imageContentType(name)!);
+  await removeOldUploads("avatars", name, (candidate) => isOwnUpload(candidate, userId));
   const avatar = `/assets/avatars/${name}`;
   await ensureProfile(userId);
   await prisma.playerProfile.update({ where: { userId }, data: { avatar } });
@@ -320,18 +312,16 @@ export async function selectDefaultAvatar(request: NextRequest) {
   return NextResponse.json({ msg: "头像已更新", avatar });
 }
 
-/** 自定义背景上传：一个用户只保留一张，全站生效（仅深色模式拉取）。 */
+/** 自定义背景上传：一个用户只保留一张，全站生效（仅深色模式拉取）。配置了 OSS 时直传 OSS。 */
 export async function uploadBackground(request: NextRequest) {
   const userId = await currentUserId(request);
   if (!userId) return message("请先登录", 401);
   const form = await request.formData().catch(() => null);
   const upload = await readUpload(form?.get("bg"));
   if (!upload.ok) return message(upload.error, 400);
-  const dir = uploadDir("user-bg");
-  await mkdir(dir, { recursive: true });
   const name = `u${userId}_${Date.now()}${upload.ext}`;
-  await writeFile(path.join(dir, name), upload.buffer);
-  await removeOldFiles(dir, name, (candidate) => isOwnUpload(candidate, userId));
+  await putUploadedImage("user-bg", name, upload.buffer, imageContentType(name)!);
+  await removeOldUploads("user-bg", name, (candidate) => isOwnUpload(candidate, userId));
   const backgroundImage = `/assets/user-bg/${name}`;
   await prisma.user.update({ where: { id: userId }, data: { backgroundImage } });
   return NextResponse.json({ msg: "背景已更新", background: backgroundImage });

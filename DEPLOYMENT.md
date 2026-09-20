@@ -37,6 +37,18 @@ Avatars and custom backgrounds are written to `UPLOAD_DIR`, which is bind-mounte
 
 The app serves these files itself through `/assets/avatars/*` and `/assets/user-bg/*`, so an upload shows up immediately. Uploads live outside the image, so they survive `compose up -d --build`, but they are not part of the pipeline's SQL backup: back up that host directory together with the database dumps.
 
+### Object storage (Aliyun OSS, optional)
+
+Instead of the local directory, uploads can go straight to Aliyun OSS. Set `OSS_REGION`, `OSS_BUCKET`, `OSS_ACCESS_KEY_ID` and `OSS_ACCESS_KEY_SECRET` in `.env`; the app then writes every avatar/background directly to OSS under `<OSS_PREFIX?>/<kind>/<filename>` and deletes the user's previous objects after a successful upload. Leave the four variables empty to keep using `UPLOAD_DIR` (development defaults to local disk).
+
+Reading stays compatible either way:
+
+- With `OSS_PUBLIC_BASE_URL` (e.g. `https://<bucket>.oss-cn-hangzhou.aliyuncs.com`) and a public-read bucket, `/assets/...` responds `307` straight to OSS, so image traffic bypasses the application. The URL stored in the database is unchanged.
+- Without it, the app fetches the object from OSS itself (works with private buckets) and streams it back with immutable cache headers.
+- Objects missing from OSS fall back to `UPLOAD_DIR` and the legacy `public/assets` folder, so files uploaded before enabling OSS keep working with no migration.
+
+The AccessKey should be scoped to just that bucket (PutObject, GetObject, HeadObject, ListObjects, DeleteObject) via a RAM policy. `OSS_PREFIX` optionally namespaces the object keys when the bucket is shared with other applications.
+
 ## Gitee workflow
 
 The checked-in Gitee Go workflow uses Node 20 to generate Prisma Client, type-check, build and package the release. The deployment agent then validates the production Compose file, starts PostgreSQL, creates a pre-deployment SQL backup, builds the application image and waits for `/api/health` to confirm both the application and database are available.

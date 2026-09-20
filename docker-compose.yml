@@ -29,6 +29,12 @@ services:
       CAPTCHA_SECRET: ${CAPTCHA_SECRET:-}
       SESSION_SECRET: ${SESSION_SECRET:-}
       UPLOAD_DIR: /app/data/uploads
+      OSS_REGION: ${OSS_REGION:-}
+      OSS_BUCKET: ${OSS_BUCKET:-}
+      OSS_ACCESS_KEY_ID: ${OSS_ACCESS_KEY_ID:-}
+      OSS_ACCESS_KEY_SECRET: ${OSS_ACCESS_KEY_SECRET:-}
+      OSS_PUBLIC_BASE_URL: ${OSS_PUBLIC_BASE_URL:-}
+      OSS_PREFIX: ${OSS_PREFIX:-}
     volumes:
       - "${UPLOAD_DIR:-./data/uploads}:/app/data/uploads"
     ports:
