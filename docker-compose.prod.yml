@@ -1,7 +1,20 @@
 services:
   db:
     image: postgres:16-alpine
+    mem_limit: 700m
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c effective_cache_size=768MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=64MB
+      -c max_connections=50
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
@@ -14,13 +27,12 @@ services:
       timeout: 5s
       retries: 12
 
-  # 一次性容器：每次部署先跑数据库迁移 + 种子，成功后才启动 app。
-  # 只依赖 prisma CLI（devDependencies），体积小、构建快，和 app 共用 deps 缓存层。
   migrate:
     build:
       context: .
       dockerfile: Dockerfile
       target: migrate
+    mem_limit: 300m
     restart: "no"
     depends_on:
       db:
@@ -34,7 +46,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    mem_limit: 800m
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
       db:
         condition: service_healthy
@@ -45,14 +63,13 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
       CAPTCHA_SECRET: ${CAPTCHA_SECRET:?CAPTCHA_SECRET is required}
-      # 登录态签名密钥。未单独配置时会退回 CAPTCHA_SECRET（见 src/server/auth.ts）并打印告警，
-      # 部署时建议设置独立的值，避免「验证码密钥泄露 = 登录态可伪造」。
       SESSION_SECRET: ${SESSION_SECRET:-}
       UPLOAD_DIR: /app/data/uploads
+      NODE_OPTIONS: --max-old-space-size=512
     volumes:
       - "${UPLOAD_DIR:-./data/uploads}:/app/data/uploads"
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
     healthcheck:
       test:
         - CMD
@@ -62,7 +79,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 40s
+      start_period: 60s
 
 volumes:
   postgres_data:
