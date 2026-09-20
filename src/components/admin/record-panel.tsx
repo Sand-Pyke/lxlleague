@@ -2,6 +2,7 @@
 
 import {
   CopyOutlined,
+  CheckOutlined,
   DeleteOutlined,
   PlusOutlined,
   ReloadOutlined,
@@ -177,6 +178,7 @@ export function RecordPanel({
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
   const [roundFilter, setRoundFilter] = useState<number>(0);
   const [playerFilter, setPlayerFilter] = useState("");
+  const [recordsConfirmed, setRecordsConfirmed] = useState(false);
 
   // 自动导入（LCU agent）用的令牌：只存在管理员自己身上，可重置。
   const [importToken, setImportToken] = useState("");
@@ -232,6 +234,7 @@ export function RecordPanel({
         const data = await getJson(`/api/admin/result/list?matchId=${matchId}`);
         const list = asArray<RecordRow>(data.records);
         setRows(list);
+        setRecordsConfirmed(Boolean(data.records_confirmed));
         const nextGame = list.reduce((max, row) => Math.max(max, row.game_no), 0) + 1;
         setGameNo(Math.min(nextGame, maxGameNo));
         // 新录入默认落在当前轮，避免和赛果页（默认展示当前轮）错开。
@@ -327,6 +330,14 @@ export function RecordPanel({
       "战绩已删除",
     );
     if (data) setSelectedRowKeys([]);
+  }
+
+  async function confirmRecords() {
+    const data = await run(
+      () => postJson("/api/admin/result/confirm", { matchId }),
+      "当前战绩已确认导入",
+    );
+    if (data) setRecordsConfirmed(true);
   }
 
   async function submit() {
@@ -557,7 +568,6 @@ export function RecordPanel({
   ];
 
   const recordColumns: ColumnsType<RecordRow> = [
-    { title: "局", dataIndex: "game_no", key: "game_no", width: 60 },
     {
       title: "场次",
       dataIndex: "round_no",
@@ -650,20 +660,22 @@ export function RecordPanel({
           >
             编辑
           </Button>
-          <Popconfirm
-            title="删除这条战绩？"
-            description="选手统计与榜单会立即重算。"
-            okText="删除"
-            okButtonProps={{ danger: true }}
-            cancelText="取消"
-            onConfirm={() =>
-              run(() => postJson(`/api/admin/result/delete/${row.id}`), "战绩已删除")
-            }
-          >
-            <Button size="small" danger loading={busy}>
-              删除
-            </Button>
-          </Popconfirm>
+          {!recordsConfirmed ? (
+            <Popconfirm
+              title="删除这条战绩？"
+              description="选手统计与榜单会立即重算。"
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              cancelText="取消"
+              onConfirm={() =>
+                run(() => postJson(`/api/admin/result/delete/${row.id}`), "战绩已删除")
+              }
+            >
+              <Button size="small" danger loading={busy}>
+                删除
+              </Button>
+            </Popconfirm>
+          ) : null}
         </Space>
       ),
     },
@@ -860,19 +872,34 @@ export function RecordPanel({
             <Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>
               刷新
             </Button>
-            <Popconfirm
-              title={`删除选中的 ${selectedRowKeys.length} 条战绩？`}
-              description="选手统计与榜单会立即重算。"
-              okText="删除"
-              okButtonProps={{ danger: true }}
-              cancelText="取消"
-              disabled={!selectedRowKeys.length}
-              onConfirm={() => void batchDelete()}
-            >
-              <Button size="small" danger disabled={!selectedRowKeys.length} loading={busy}>
-                批量删除
+            {!recordsConfirmed ? (
+              <Button
+                size="small"
+                type="primary"
+                icon={<CheckOutlined />}
+                loading={busy}
+                onClick={() => void confirmRecords()}
+              >
+                确认导入当前战绩
               </Button>
-            </Popconfirm>
+            ) : (
+              <Tag color="green">已确认导入</Tag>
+            )}
+            {!recordsConfirmed ? (
+              <Popconfirm
+                title={`删除选中的 ${selectedRowKeys.length} 条战绩？`}
+                description="选手统计与榜单会立即重算。"
+                okText="删除"
+                okButtonProps={{ danger: true }}
+                cancelText="取消"
+                disabled={!selectedRowKeys.length}
+                onConfirm={() => void batchDelete()}
+              >
+                <Button size="small" danger disabled={!selectedRowKeys.length} loading={busy}>
+                  批量删除
+                </Button>
+              </Popconfirm>
+            ) : null}
           </Space>
         }
       >
@@ -908,10 +935,14 @@ export function RecordPanel({
               size="small"
               columns={recordColumns}
               dataSource={shownRows}
-              rowSelection={{
-                selectedRowKeys,
-                onChange: (keys) => setSelectedRowKeys(keys as number[]),
-              }}
+              rowSelection={
+                recordsConfirmed
+                  ? undefined
+                  : {
+                      selectedRowKeys,
+                      onChange: (keys) => setSelectedRowKeys(keys as number[]),
+                    }
+              }
               pagination={{ pageSize: 10, showSizeChanger: false }}
               scroll={{ x: 1320 }}
             />

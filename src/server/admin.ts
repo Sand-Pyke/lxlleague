@@ -24,7 +24,7 @@ import {
   signRank,
   totalRoundsFor,
 } from "@/server/roster";
-import { listMatchRecords } from "@/server/records";
+import { confirmMatchRecords, listMatchRecords } from "@/server/records";
 
 const asText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 
@@ -102,9 +102,12 @@ export async function setMatchBo(matchId: number, bo: string) {
 }
 
 export async function setMatchFee(matchId: number, useFee: boolean) {
-  await requireMatch(matchId);
-  const match = await prisma.match.update({ where: { id: matchId }, data: { useFee } });
-  return { msg: "已更新选费设置", use_fee: match.useFee };
+  const match = await requireMatch(matchId);
+  if (match.status !== "CREATED") {
+    throw badRequest("只有待选人阶段的赛事才能修改选费设置");
+  }
+  const updated = await prisma.match.update({ where: { id: matchId }, data: { useFee } });
+  return { msg: "已更新选费设置", use_fee: updated.useFee };
 }
 
 export async function setMatchLive(matchId: number, liveUrl: string) {
@@ -140,7 +143,8 @@ export async function finishMatch(matchId: number) {
     : roundNo === 1
       ? pairTeams(match, teams).filter((pair): pair is [number, number] => pair[1] !== null)
       : [];
-  if (!pairs.length) throw badRequest("该比赛还没有录入赛果，如果提前结束则不会再将该场比赛的结果发送到比赛记录");
+  if (!pairs.length)
+    throw badRequest("该比赛还没有录入赛果，如果提前结束则不会再将该场比赛的结果发送到比赛记录");
 
   const scores = await prisma.matchScore.findMany({
     where: { matchId, roundNo },
@@ -528,7 +532,9 @@ export async function banUser(userId: number, days: number, actorId: number) {
   if (activeSignups.length) {
     const names = activeSignups.map((sign) => sign.match.name);
     const shown =
-      names.length > 3 ? `${names.slice(0, 3).join("、")} 等 ${names.length} 个赛事` : names.join("、");
+      names.length > 3
+        ? `${names.slice(0, 3).join("、")} 等 ${names.length} 个赛事`
+        : names.join("、");
     throw badRequest(`该用户已报名「${shown}」，暂时不能处罚`);
   }
   const banUntil = new Date(Date.now() + days * 86400000);
@@ -631,8 +637,18 @@ export async function signupList() {
 }
 
 export async function listMatchRecordsForAdmin(matchId: number) {
-  return { records: await listMatchRecords(matchId), match_id: matchId };
+  const [records, match] = await Promise.all([
+    listMatchRecords(matchId),
+    prisma.match.findUnique({ where: { id: matchId }, select: { recordsConfirmed: true } }),
+  ]);
+  return {
+    records,
+    match_id: matchId,
+    records_confirmed: match?.recordsConfirmed ?? false,
+  };
 }
+
+export { confirmMatchRecords };
 
 /** 报名时的字段校验（原 /api/match/signup 规则）。 */
 export function assertSignupPayload(mainPosition: unknown, subPosition: unknown) {

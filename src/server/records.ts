@@ -380,6 +380,16 @@ export async function listMatchRecords(matchId: number) {
   }));
 }
 
+export async function confirmMatchRecords(matchId: number) {
+  const match = await prisma.match.findUnique({
+    where: { id: matchId },
+    select: { id: true },
+  });
+  if (!match) return { kind: "not_found" as const };
+  await prisma.match.update({ where: { id: matchId }, data: { recordsConfirmed: true } });
+  return { kind: "ok" as const };
+}
+
 export async function updateRecord(recordId: number, body: Record<string, unknown>) {
   const record = await prisma.matchGameRecord.findUnique({ where: { id: recordId } });
   if (!record) return { kind: "not_found" as const };
@@ -402,14 +412,23 @@ export async function updateRecord(recordId: number, body: Record<string, unknow
 }
 
 export async function deleteRecord(recordId: number) {
-  const record = await prisma.matchGameRecord.findUnique({ where: { id: recordId } });
+  const record = await prisma.matchGameRecord.findUnique({
+    where: { id: recordId },
+    include: { match: { select: { recordsConfirmed: true } } },
+  });
   if (!record) return { kind: "not_found" as const };
+  if (record.match?.recordsConfirmed) return { kind: "confirmed" as const };
   await prisma.matchGameRecord.delete({ where: { id: recordId } });
   return { kind: "ok" as const };
 }
 
 /** 批量删除战绩（后台「已录入战绩」勾选后批量删除）。 */
 export async function deleteRecords(recordIds: number[]) {
+  const confirmed = await prisma.matchGameRecord.findFirst({
+    where: { id: { in: recordIds }, match: { recordsConfirmed: true } },
+    select: { id: true },
+  });
+  if (confirmed) return { kind: "confirmed" as const };
   const { count } = await prisma.matchGameRecord.deleteMany({
     where: { id: { in: recordIds } },
   });

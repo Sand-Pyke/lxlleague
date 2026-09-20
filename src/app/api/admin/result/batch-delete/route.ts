@@ -9,6 +9,8 @@ export const POST = adminRoute(async ({ body }) => {
     .map((id) => Number(id))
     .filter((id) => Number.isInteger(id) && id > 0);
   if (!ids.length) throw badRequest("请选择要删除的战绩");
-  const { deleted } = await deleteRecords(ids);
+  const result = await deleteRecords(ids);
+  if (result.kind === "confirmed") throw badRequest("当前赛事战绩已确认导入，不能删除");
+  const { deleted } = result;
   return { msg: `已删除 ${deleted} 条战绩`, deleted };
 });

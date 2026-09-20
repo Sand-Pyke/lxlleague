@@ -80,6 +80,7 @@ model Match {
   round        String            @default("常规赛")
   liveUrl      String            @default("")
   useFee       Boolean           @default(true)
+  recordsConfirmed Boolean        @default(false)
   currentRound Int               @default(1)
   teamOneId    Int?
   teamTwoId    Int?

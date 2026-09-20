@@ -197,6 +197,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
           size="small"
           checked={match.useFee}
           loading={busy}
+          disabled={match.status !== "CREATED"}
           onChange={(useFee) =>
             void run(
               () => postJson(`/api/admin/match/set_fee/${match.id}`, { useFee }),
