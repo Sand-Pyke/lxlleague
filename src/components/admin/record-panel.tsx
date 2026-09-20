@@ -761,15 +761,10 @@ export function RecordPanel({
         </Space>
       </Card>
 
-      <Card
+      {/* <Card
         className="antd-panel"
         size="small"
         title={`批量录入（最多 10 行）${matchId > 0 ? "" : " · 自由对局"}`}
-        extra={
-          <Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>
-            刷新
-          </Button>
-        }
       >
         {error ? <Alert type="error" showIcon title={error} style={{ marginBottom: 12 }} /> : null}
         <Space wrap style={{ marginBottom: 12 }}>
@@ -853,26 +848,31 @@ export function RecordPanel({
             提交录入
           </Button>
         </Space>
-      </Card>
+      </Card> */}
 
       <Card
         className="antd-panel"
         size="small"
         title={`已录入战绩（${rows.length} 条）`}
         extra={
-          <Popconfirm
-            title={`删除选中的 ${selectedRowKeys.length} 条战绩？`}
-            description="选手统计与榜单会立即重算。"
-            okText="删除"
-            okButtonProps={{ danger: true }}
-            cancelText="取消"
-            disabled={!selectedRowKeys.length}
-            onConfirm={() => void batchDelete()}
-          >
-            <Button size="small" danger disabled={!selectedRowKeys.length} loading={busy}>
-              批量删除
+          <Space size={8}>
+            <Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>
+              刷新
             </Button>
-          </Popconfirm>
+            <Popconfirm
+              title={`删除选中的 ${selectedRowKeys.length} 条战绩？`}
+              description="选手统计与榜单会立即重算。"
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              cancelText="取消"
+              disabled={!selectedRowKeys.length}
+              onConfirm={() => void batchDelete()}
+            >
+              <Button size="small" danger disabled={!selectedRowKeys.length} loading={busy}>
+                批量删除
+              </Button>
+            </Popconfirm>
+          </Space>
         }
       >
         {loading && !rows.length ? (

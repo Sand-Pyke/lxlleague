@@ -226,24 +226,26 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
           >
             管理
           </Button>
-          <Popconfirm
-            title={`删除赛事「${match.name}」？`}
-            description="该赛事的报名、队伍、轮次与战绩会被一并删除。"
-            okText="删除"
-            okButtonProps={{ danger: true }}
-            cancelText="取消"
-            onConfirm={() =>
-              run(() => postJson(`/api/admin/match/delete/${match.id}`), "比赛已删除", {
-                refreshBoard: false,
-              }).then((succeeded) => {
-                if (succeeded) setSelectedId((current) => (current === match.id ? null : current));
-              })
-            }
-          >
-            <Button size="small" danger loading={busy}>
-              删除
-            </Button>
-          </Popconfirm>
+          {match.status === "CREATED" ? (
+            <Popconfirm
+              title={`删除赛事「${match.name}」？`}
+              description="该赛事的报名、队伍、轮次与战绩会被一并删除。"
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              cancelText="取消"
+              onConfirm={() =>
+                run(() => postJson(`/api/admin/match/delete/${match.id}`), "比赛已删除", {
+                  refreshBoard: false,
+                }).then((succeeded) => {
+                  if (succeeded) setSelectedId((current) => (current === match.id ? null : current));
+                })
+              }
+            >
+              <Button size="small" danger loading={busy}>
+                删除
+              </Button>
+            </Popconfirm>
+          ) : null}
         </Space>
       ),
     },

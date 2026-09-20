@@ -168,7 +168,10 @@ export async function finishPick(matchId: number) {
 
 /** 删除赛事并级联清理报名 / 队伍 / 战绩 / 轮次 / 战果。 */
 export async function deleteMatch(matchId: number) {
-  await requireMatch(matchId);
+  const match = await requireMatch(matchId);
+  if (match.status !== "CREATED") {
+    throw badRequest("进行中或已结束的赛事不能删除");
+  }
   await prisma.$transaction([
     prisma.matchGameRecord.deleteMany({ where: { matchId } }),
     prisma.matchScore.deleteMany({ where: { matchId } }),
