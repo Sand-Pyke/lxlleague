@@ -14,7 +14,7 @@ RUN npx prisma generate
 COPY next.config.ts tsconfig.json next-env.d.ts ./
 COPY public ./public
 COPY src ./src
-RUN npm run build
+RUN DATABASE_URL="postgresql://x:x@localhost:5432/x?schema=public" SESSION_SECRET=build-placeholder CAPTCHA_SECRET=build-placeholder ADMIN_PASSWORD=build-placeholder NODE_OPTIONS="--max-old-space-size=1536" npx next build
 
 # 迁移 & 种子层：一次性容器（prisma CLI 在 devDependencies 里，只有这里需要它）
 FROM deps AS migrate

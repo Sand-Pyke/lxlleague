@@ -1,24 +1,33 @@
 services:
   db:
     image: postgres:16-alpine
+    ports:
+      - "127.0.0.1:5432:5432"
     restart: unless-stopped
+    stop_grace_period: 30s
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
-    ports:
-      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 12
-
   app:
-    build: .
+    build:
+      context: .
+      args:
+        NODE_OPTIONS: "--max-old-space-size=1536"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
     depends_on:
       db:
         condition: service_healthy
@@ -35,11 +44,11 @@ services:
       OSS_ACCESS_KEY_SECRET: ${OSS_ACCESS_KEY_SECRET:-}
       OSS_PUBLIC_BASE_URL: ${OSS_PUBLIC_BASE_URL:-}
       OSS_PREFIX: ${OSS_PREFIX:-}
+      NODE_OPTIONS: "--max-old-space-size=1536"
     volumes:
       - "${UPLOAD_DIR:-./data/uploads}:/app/data/uploads"
     ports:
       - "${APP_PORT:-3000}:3000"
-
 volumes:
   postgres_data:
   postgres_dev_data:
