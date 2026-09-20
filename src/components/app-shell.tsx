@@ -2,6 +2,7 @@
 
 import {
   HomeOutlined,
+  MessageOutlined,
   LogoutOutlined,
   MoonOutlined,
   OrderedListOutlined,
@@ -26,6 +27,7 @@ const navigation: NavItem[] = [
   { key: "/players", text: "选手", icon: <TeamOutlined /> },
   { key: "/rankings", text: "排行", icon: <OrderedListOutlined /> },
   { key: "/profile", text: "个人", icon: <UserOutlined /> },
+  { key: "/community", text: "社区", icon: <MessageOutlined /> },
 ];
 
 /** 管理后台入口：仅管理员可见，排在「个人」之后。 */

@@ -57,7 +57,12 @@ import {
   USERNAME_HINT,
   usernameFormatError,
 } from "@/lib/credentials";
-import { GAME_NAME_HINT, isValidGameNameBase, isValidGameTag, splitGameName } from "@/lib/game-name";
+import {
+  GAME_NAME_HINT,
+  isValidGameNameBase,
+  isValidGameTag,
+  splitGameName,
+} from "@/lib/game-name";
 import { championChoices, championIcon, itemIcon } from "@/lib/game-assets";
 import { missingSignupRequirements } from "@/lib/profile-requirements";
 
@@ -316,7 +321,10 @@ export function ProfileView() {
       const request: Record<EditKind, [string, Record<string, unknown>]> = {
         bio: ["/api/user/update_bio", { bio: draft.bio }],
         kook: ["/api/user/update_kook", { kook_name: draft.kookName }],
-        game: ["/api/user/game_name", { game_name: `${draft.gameName.trim()}#${draft.gameTag.trim()}` }],
+        game: [
+          "/api/user/game_name",
+          { game_name: `${draft.gameName.trim()}#${draft.gameTag.trim()}` },
+        ],
         hero: ["/api/user/favorite_heroes", { heroes: draft.heroes }],
         account: ["/api/user/change_username", { username: draft.accountName }],
         pwd: ["/api/user/change_pwd", { old_pwd: draft.oldPwd, new_pwd: draft.newPwd }],
@@ -623,7 +631,7 @@ export function ProfileView() {
                         <span>
                           {row.label}：<b>{row.value}</b>
                         </span>
-                        {(row.kind !== "account" && row.kind !=='rank') && (
+                        {row.kind !== "account" && row.kind !== "rank" && (
                           <Button size="small" type="link" onClick={() => openEdit(row.kind)}>
                             {row.value === "未设置" ? "设置" : "修改"}
                           </Button>
@@ -673,10 +681,7 @@ export function ProfileView() {
             </div>
 
             <div className="prof-side">
-              <Card
-                className="antd-panel"
-                title="常用英雄"
-              >
+              <Card className="antd-panel" title="常用英雄">
                 {favoriteHeroes.length ? (
                   favoriteHeroes.map((name) => {
                     const icon = championIcon(name);
@@ -815,11 +820,7 @@ export function ProfileView() {
                 placeholder="名称（中文/英文/数字）"
                 onChange={(event) => setDraft({ ...draft, gameName: event.target.value })}
               />
-              <Input
-                value="#"
-                disabled
-                style={{ width: 36, textAlign: "center", padding: 0 }}
-              />
+              <Input value="#" disabled style={{ width: 36, textAlign: "center", padding: 0 }} />
               <Input
                 value={draft.gameTag}
                 maxLength={6}

@@ -1369,7 +1369,10 @@ a {
   border-radius: 999px;
   padding: 2px 6px;
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 .roster-group:hover {
   color: #fff;
@@ -1408,7 +1411,9 @@ a {
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 8px;
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 .roster-more:hover {
   color: #fff;
@@ -2250,7 +2255,9 @@ body {
   color: var(--league-muted);
   font-size: 14px;
   white-space: nowrap;
-  transition: color 0.2s ease, background 0.2s ease;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
 }
 .league-nav-item:hover {
   color: var(--league-text);
@@ -3073,6 +3080,219 @@ body {
   flex-direction: column;
 }
 
+/* 用户社区：参照微博样式，帖子流（新帖在上），每条帖子下方列出评论，默认最多展示 5 条评论。 */
+.community-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.community-post {
+  min-width: 0;
+}
+
+.community-post + .community-post {
+  padding-top: 16px;
+  border-top: 1px solid var(--league-border);
+}
+
+.community-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.community-avatar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-size: 15px;
+  color: #fff;
+  background: linear-gradient(135deg, #64748b, #475569);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.community-avatar--post {
+  width: 44px;
+  height: 44px;
+  font-size: 19px;
+  background: linear-gradient(135deg, #c8aa6e, #8b5cf6);
+}
+
+.community-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.community-item-author {
+  display: flex;
+  align-items: center;
+  margin-bottom: 3px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--league-text);
+}
+
+.community-op-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--violet);
+  border-radius: 4px;
+  color: var(--violet);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+}
+
+.community-post-content {
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--league-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.community-comment-content {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--league-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.community-item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.community-item-time {
+  font-size: 12px;
+  color: var(--league-muted);
+}
+
+.community-item-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.community-item-actions .ant-btn {
+  height: 26px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+.community-item-actions .ant-btn:not(.ant-btn-dangerous) {
+  color: var(--league-muted);
+}
+
+.community-item-actions .ant-btn:not(.ant-btn-dangerous):hover {
+  color: var(--violet);
+}
+
+.community-comments {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin-top: 8px;
+  padding: 2px 14px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.38);
+}
+
+.community-comments .community-item {
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.community-comments .community-item + .community-item {
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.community-comments .community-avatar {
+  width: 30px;
+  height: 30px;
+  font-size: 13px;
+}
+
+.community-empty {
+  padding: 10px 0 8px;
+  font-size: 13px;
+  color: var(--league-muted);
+}
+
+.community-more {
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.community-more .ant-btn {
+  font-size: 13px;
+  color: var(--league-muted);
+}
+
+.community-more .ant-btn:hover {
+  color: var(--violet);
+}
+
+/* 浅色主题：评论区底色与分隔线换成浅色（基础规则是照深色底写死的），
+   头像渐变提亮一档、楼主徽章压深保证白底上的对比度。 */
+:root[data-theme="light"] .community-comments {
+  background: rgba(79, 70, 229, 0.05);
+}
+
+:root[data-theme="light"] .community-comments .community-item + .community-item,
+:root[data-theme="light"] .community-more {
+  border-color: rgba(30, 41, 59, 0.1);
+}
+
+:root[data-theme="light"] .community-avatar {
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+}
+
+:root[data-theme="light"] .community-op-badge {
+  border-color: #6d28d9;
+  color: #6d28d9;
+}
+
+@media (max-width: 560px) {
+  .community-feed {
+    gap: 12px;
+  }
+
+  .community-item {
+    gap: 10px;
+  }
+
+  .community-avatar--post {
+    width: 38px;
+    height: 38px;
+    font-size: 16px;
+  }
+
+  .community-comments {
+    margin-right: -2px;
+    margin-left: -2px;
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .community-item-meta {
+    align-items: flex-start;
+  }
+}
+
 /* 赛季数据的 8 块格子平分多出来的高度，表现为「格子变高」而不是「下方留白」。 */
 .prof-main > .ant-card:last-child .prof-stats {
   flex: 1;
@@ -3587,7 +3807,7 @@ body {
   background: #eef2ff;
 }
 
-.ant-alert.ant-alert-warning.ant-alert-outlined.ant-alert-with-description.auth-rank-notice{
+.ant-alert.ant-alert-warning.ant-alert-outlined.ant-alert-with-description.auth-rank-notice {
   margin-bottom: 10px;
 }
 

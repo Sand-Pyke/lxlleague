@@ -201,3 +201,15 @@ model MatchGameRecord {
   @@index([matchId, roundNo, gameNo])
   @@index([userId, playedAt])
 }
+
+model CommunityComment {
+  id        Int      @id @default(autoincrement())
+  content   String   @db.VarChar(500)
+  createdAt DateTime @default(now())
+  parentId  Int?
+  parent    CommunityComment?  @relation("CommunityReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  comments  CommunityComment[] @relation("CommunityReplies")
+
+  @@index([createdAt])
+  @@index([parentId])
+}
