@@ -1,4 +1,5 @@
 import { createReadStream } from "node:fs";
+import { createHmac } from "node:crypto";
 import { mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -84,6 +85,43 @@ export function ossClient() {
 function ossKey(kind: UploadKind, name: string) {
   const prefix = process.env.OSS_PREFIX?.replace(/^\/+|\/+$/g, "") ?? "";
   return prefix ? `${prefix}/${kind}/${name}` : `${kind}/${name}`;
+}
+
+/**
+ * OSS Post Policy 直传：签发一次性上传凭证（前端拿它直接 POST 到 OSS，不经过应用服务器）。
+ * policy 锁定具体对象 Key、大小范围、Content-Type 与有效期，避免被滥用。
+ */
+export function ossPostPolicy(
+  kind: UploadKind,
+  name: string,
+  contentType: string,
+  maxBytes: number,
+  expiresInMs = 10 * 60 * 1000,
+) {
+  if (!ossEnabled()) return null;
+  const host = `https://${process.env.OSS_BUCKET}.${process.env.OSS_REGION}.aliyuncs.com`;
+  const key = ossKey(kind, name);
+  const expiration = new Date(Date.now() + expiresInMs).toISOString();
+  const policy = {
+    expiration,
+    conditions: [
+      { bucket: process.env.OSS_BUCKET },
+      ["eq", "$key", key],
+      ["content-length-range", 1, maxBytes],
+      ["eq", "$Content-Type", contentType],
+    ],
+  };
+  const policyBase64 = Buffer.from(JSON.stringify(policy)).toString("base64");
+  const signature = createHmac("sha1", process.env.OSS_ACCESS_KEY_SECRET!)
+    .update(policyBase64)
+    .digest("base64");
+  return {
+    host,
+    accessKeyId: process.env.OSS_ACCESS_KEY_ID!,
+    policy: policyBase64,
+    signature,
+    key,
+  };
 }
 
 /** 写入一个存储对象（图片/视频通用）：配置了 OSS 就直传，否则落本地磁盘。 */

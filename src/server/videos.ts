@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { ApiError, badRequest, notFound } from "@/server/api";
-import { deleteStoredObject, putStoredObject } from "@/server/uploads";
+import { deleteStoredObject, ossPostPolicy, putStoredObject } from "@/server/uploads";
 
 /**
  * 视频内容模块（最小可用版）：仅管理员上传比赛集锦等官方内容，
@@ -102,4 +102,54 @@ export async function deleteVideo(id: number) {
   await prisma.video.delete({ where: { id } });
   const name = video.objectKey.split("/").pop() ?? "";
   if (name) await deleteStoredObject("videos", name).catch(() => undefined);
+}
+
+/** 签发视频直传凭证：前端拿它直接 POST 到 OSS；未配置 OSS 时返回 direct=false 由前端回退中转。 */
+export async function createVideoUploadPolicy(filename: unknown) {
+  const name = asText(filename);
+  if (!name) throw badRequest("请选择视频文件");
+  const ext = path.extname(name).toLowerCase();
+  const mimeType = VIDEO_TYPES[ext];
+  if (!mimeType) throw badRequest("仅支持 mp4/webm 视频");
+  const objectName = `v${Date.now()}_${randomBytes(4).toString("hex")}${ext}`;
+  const policy = ossPostPolicy("videos", objectName, mimeType, MAX_VIDEO_BYTES);
+  if (!policy) return { direct: false as const };
+  return {
+    direct: true as const,
+    ...policy,
+    objectKey: `videos/${objectName}`,
+    mimeType,
+  };
+}
+
+/** 直传成功后记录视频（校验标题/简介/大小，写入 Video）。 */
+export async function confirmVideo(
+  title: unknown,
+  description: unknown,
+  objectKey: unknown,
+  size: unknown,
+  mimeType: unknown,
+) {
+  const name = asText(title);
+  if (!name) throw badRequest("标题不能为空");
+  if (name.length > 100) throw badRequest("标题不能超过 100 个字");
+  const desc = asText(description);
+  if (desc.length > 500) throw badRequest("简介不能超过 500 个字");
+  const key = asText(objectKey);
+  const mime = asText(mimeType);
+  if (!key || !mime) throw badRequest("上传信息不完整");
+  const sizeNum = Number(size);
+  if (!Number.isInteger(sizeNum) || sizeNum < 1 || sizeNum > MAX_VIDEO_BYTES) {
+    throw badRequest(`视频大小无效（上限 ${MAX_VIDEO_MB}MB）`);
+  }
+  const video = await prisma.video.create({
+    data: {
+      title: name.slice(0, 100),
+      description: desc || null,
+      objectKey: key,
+      mimeType: mime,
+      size: sizeNum,
+    },
+  });
+  return toDto(video);
 }

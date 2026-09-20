@@ -130,13 +130,58 @@ export function VideoGallery() {
     if (!values || !file) return;
     setPending(true);
     try {
-      const body = new FormData();
-      body.append("title", values.title ?? "");
-      if (values.description) body.append("description", values.description);
-      body.append("file", file);
-      const response = await fetch("/api/admin/videos", { method: "POST", body });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || data.msg || "上传失败");
+      const title = values.title ?? "";
+      const description = values.description ?? "";
+
+      // 1. 尝试获取 OSS 直传凭证
+      const policyResponse = await fetch("/api/admin/videos/policy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name }),
+      });
+      const policyData = await policyResponse.json().catch(() => ({}));
+      if (!policyResponse.ok) {
+        throw new Error(policyData.error || policyData.msg || "获取上传凭证失败");
+      }
+
+      if (policyData.direct) {
+        // 2a. 直传 OSS（不经过应用服务器，绕开 Nginx 大小限制）
+        const ossBody = new FormData();
+        ossBody.append("key", policyData.key);
+        ossBody.append("policy", policyData.policy);
+        ossBody.append("OSSAccessKeyId", policyData.accessKeyId);
+        ossBody.append("signature", policyData.signature);
+        ossBody.append("file", file);
+        const ossResponse = await fetch(policyData.host, { method: "POST", body: ossBody });
+        if (!ossResponse.ok) throw new Error("上传到 OSS 失败，请重试");
+
+        // 3a. 确认并记录视频
+        const confirmResponse = await fetch("/api/admin/videos/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title,
+            description,
+            objectKey: policyData.objectKey,
+            size: file.size,
+            mimeType: policyData.mimeType,
+          }),
+        });
+        const confirmData = await confirmResponse.json().catch(() => ({}));
+        if (!confirmResponse.ok) {
+          throw new Error(confirmData.error || confirmData.msg || "保存失败");
+        }
+      } else {
+        // 2b. 未配置 OSS：回退到服务器中转上传
+        const body = new FormData();
+        body.append("title", title);
+        if (description) body.append("description", description);
+        body.append("file", file);
+        const response = await fetch("/api/admin/videos", { method: "POST", body });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || data.msg || "上传失败");
+      }
+
       message.success("视频已发布");
       setUploadOpen(false);
       setFile(null);
