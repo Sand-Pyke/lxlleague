@@ -171,7 +171,7 @@ export function HomeDashboard({ matches, players, recent }: Props) {
 
         <HomePanel title="选手排行" extra={<Link href="/rankings">完整榜单</Link>}>
           {leaders.length ? (
-            <RankRows players={leaders} value={(player) => `${player.winRate}% 胜率`} />
+            <RankRows players={leaders} value={(player) => `${player.points} 积分`} />
           ) : (
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}

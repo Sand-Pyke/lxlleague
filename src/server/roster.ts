@@ -211,12 +211,38 @@ export async function endRound(matchId: number) {
 
   if (pairs.length === 1) {
     // 决赛：冠军出炉，赛事结束。
+    const [finalTeamOneId, finalTeamTwoId] = pairs[0];
+    const championTeamId = winners[0];
+    const runnerupTeamId = championTeamId === finalTeamOneId ? finalTeamTwoId : finalTeamOneId;
+    const finalSignups = await prisma.matchSignup.findMany({
+      where: {
+        matchId,
+        teamId: { in: [championTeamId, runnerupTeamId] },
+      },
+      select: { userId: true, teamId: true },
+    });
+    const rankUpdates = finalSignups.flatMap((signup) =>
+      signup.teamId === championTeamId
+        ? [
+            prisma.matchGameRecord.updateMany({
+              where: { matchId, userId: signup.userId },
+              data: { teamRank: 1 },
+            }),
+          ]
+        : [
+            prisma.matchGameRecord.updateMany({
+              where: { matchId, userId: signup.userId },
+              data: { teamRank: 2 },
+            }),
+          ],
+    );
     await prisma.$transaction([
       freezePairs,
       savePairs,
+      ...rankUpdates,
       prisma.match.update({ where: { id: matchId }, data: { status: "FINISHED" } }),
     ]);
-    return { kind: "ok" as const, roundNo, finished: true, championTeamId: winners[0] };
+    return { kind: "ok" as const, roundNo, finished: true, championTeamId };
   }
 
   // 半决赛及之前：胜者按顺序两两配对成下一轮。

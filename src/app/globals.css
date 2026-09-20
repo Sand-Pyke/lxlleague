@@ -2584,11 +2584,20 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+  max-width: 180px;
 }
 
 .table-player > span {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+}
+
+.table-player b,
+.table-player small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .table-player small {
@@ -3656,6 +3665,25 @@ body {
   margin: 4px 0 10px;
   font-size: 12px;
   color: var(--league-muted);
+}
+
+.rankings-info {
+  color: var(--league-muted);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.rank-podium-name {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.rank-podium-name small {
+  color: var(--league-muted);
+  font-size: 12px;
+  font-weight: 400;
 }
 
 /* 阵容页头部：返回链接 + 赛事名 + 当前轮次收成一行。 */

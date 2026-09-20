@@ -514,7 +514,15 @@ export async function gameDetail(matchId: number, gameNo: number) {
 
 type RankedRecord = Pick<
   MatchGameRecord,
-  "champion" | "result" | "kills" | "deaths" | "assists" | "isMvp" | "isSvp" | "teamRank"
+  "matchId"
+  | "champion"
+  | "result"
+  | "kills"
+  | "deaths"
+  | "assists"
+  | "isMvp"
+  | "isSvp"
+  | "teamRank"
 >;
 
 export type PlayerStats = {
@@ -551,8 +559,18 @@ export function summarize(records: RankedRecord[]): PlayerStats {
   const sumAssists = records.reduce((sum, record) => sum + record.assists, 0);
   const mvp = records.filter((record) => record.isMvp).length;
   const svp = records.filter((record) => record.isSvp).length;
-  const teamChampion = records.filter((record) => record.teamRank === 1).length;
-  const runnerup = records.filter((record) => record.teamRank === 2).length;
+  const placementCount = (teamRank: 1 | 2) => {
+    const matches = new Set<number>();
+    let standalone = 0;
+    for (const record of records) {
+      if (record.teamRank !== teamRank) continue;
+      if (record.matchId === null) standalone += 1;
+      else matches.add(record.matchId);
+    }
+    return matches.size + standalone;
+  };
+  const teamChampion = placementCount(1);
+  const runnerup = placementCount(2);
 
   const championCount = new Map<string, number>();
   for (const record of records) {

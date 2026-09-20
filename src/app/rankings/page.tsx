@@ -1,7 +1,7 @@
 "use client";
 
-import { CrownFilled, CrownOutlined } from "@ant-design/icons";
-import { Avatar, Card, Empty, Table, Tag } from "antd";
+import { CrownFilled, CrownOutlined, InfoCircleOutlined } from "@ant-design/icons";
+import { Avatar, Card, Empty, Table, Tag, Tooltip } from "antd";
 import type { TableColumnsType } from "antd";
 import Link from "next/link";
 import { LeagueShell } from "@/components/app-shell";
@@ -37,9 +37,9 @@ function PodiumSlot({ place, player }: { place: number; player?: Player }) {
         </span>
       </span>
       <Link className="rank-podium-name" href={`/profile?uid=${player.id}`}>
-        {player.name}
+        <b>{player.gameName || "—"}</b>
+        <small>{player.name}</small>
       </Link>
-      <span className="rank-podium-sub">{player.gameName || "—"}</span>
       <span className="rank-podium-points">
         <b>{player.points}</b>
         <small>积分</small>
@@ -79,12 +79,13 @@ export default function RankingsPage() {
     {
       title: "选手",
       key: "player",
+      width: 190,
       render: (_, player) => (
         <Link className="table-player" href={`/profile?uid=${player.id}`}>
           <Avatar src={player.avatar || undefined} />{" "}
           <span>
-            <b>{player.name}</b>
-            <small>{player.gameName}</small>
+            <b>{player.gameName || "—"}</b>
+            <small>{player.name}</small>
           </span>
         </Link>
       ),
@@ -124,6 +125,11 @@ export default function RankingsPage() {
             <CrownOutlined /> 冠军榜单
           </>
         }
+        extra={
+          <Tooltip title="积分规则：胜场 +10 分，败场 −5 分，MVP +8 分，SVP +5 分，冠军 +30 分，亚军 +15 分，最低 0 分。">
+            <InfoCircleOutlined className="rankings-info" />
+          </Tooltip>
+        }
       >
         {ranked.length ? (
           <>
@@ -142,6 +148,7 @@ export default function RankingsPage() {
                   dataSource={rest}
                   rowKey="id"
                   pagination={false}
+                  scroll={{ x: 680 }}
                 />
               </>
             ) : null}
