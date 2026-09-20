@@ -221,6 +221,18 @@ export async function teamsBoard(matchId: number) {
     }),
   ]);
 
+  // 今日 FMVP 选手（若已设置）。
+  const fmvpUser = match.fmvpUserId
+    ? await prisma.user.findUnique({
+        where: { id: match.fmvpUserId },
+        select: {
+          id: true,
+          username: true,
+          profile: { select: { gameName: true, avatar: true } },
+        },
+      })
+    : null;
+
   const useFee = Boolean(match.useFee);
   const usedByTeam = new Map<number, number>();
   for (const sign of signs) {
@@ -293,7 +305,28 @@ export async function teamsBoard(matchId: number) {
     has_score,
     round_pairs,
     budget: useFee ? await matchBudget(matchId) : 0,
+    fmvp: fmvpUser
+      ? {
+          user_id: fmvpUser.id,
+          username: fmvpUser.username,
+          game_name: fmvpUser.profile?.gameName ?? "",
+          avatar: fmvpUser.profile?.avatar ?? "",
+        }
+      : null,
   };
+}
+
+/** 设置今日 FMVP：选手必须已报名该赛事且已编排进某支队伍；设置后不可更改。 */
+export async function setFmvp(matchId: number, userId: number) {
+  const match = await requireMatch(matchId);
+  if (match.fmvpUserId) throw badRequest("今日 FMVP 已设置，不可更改");
+  const sign = await prisma.matchSignup.findFirst({
+    where: { matchId, userId, teamId: { not: null } },
+    select: { userId: true },
+  });
+  if (!sign) throw badRequest("只能从已编排进队伍的参赛选手中选择 FMVP");
+  await prisma.match.update({ where: { id: matchId }, data: { fmvpUserId: userId } });
+  return { msg: "今日 FMVP 已设置" };
 }
 
 /**

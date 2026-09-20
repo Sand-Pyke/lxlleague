@@ -355,6 +355,17 @@ export async function getMatchResultData(id: string | number, options: MatchResu
 
   const players = await getMatchPlayers(matchId);
 
+  // 今日 FMVP（若已设置）：赛果页展示用游戏昵称。
+  const fmvpUser = match.fmvpUserId
+    ? await prisma.user.findUnique({
+        where: { id: match.fmvpUserId },
+        select: {
+          username: true,
+          profile: { select: { gameName: true, name: true } },
+        },
+      })
+    : null;
+
   const teamCount = teams.length;
   const currentRound = match.currentRound || 1;
   const totalRounds = isBracketTeamCount(teamCount)
@@ -480,6 +491,9 @@ export async function getMatchResultData(id: string | number, options: MatchResu
         total_rounds: totalRounds,
         champion_team_id: championTeamId,
         champion_name: championTeamId ? (tmMap.get(championTeamId) ?? "冠军") : "",
+        fmvp_name: fmvpUser
+          ? fmvpUser.profile?.gameName || fmvpUser.profile?.name || fmvpUser.username
+          : "",
       },
       rounds: sortedRounds,
       selected_round: selectedRound,

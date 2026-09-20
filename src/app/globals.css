@@ -1538,6 +1538,22 @@ a {
   font-size: 30px;
   color: #fbbf24;
 }
+.result-hero .fmvp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 14px;
+}
+.result-hero .fmvp small {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #67e8f9;
+}
+.result-hero .fmvp b {
+  font-size: 20px;
+  color: #67e8f9;
+}
 .result-hero .round-state {
   margin: 16px 0 0;
   color: var(--muted);
@@ -2512,6 +2528,12 @@ body {
 /* 资料未补全时的报名提示：基础色 #fcd34d 同样在白底上看不清。 */
 :root[data-theme="light"] .signup-blocked-note {
   color: #a16207;
+}
+
+/* 赛果页「今日 FMVP」的浅青字在白底上对比不足，压深成青蓝。 */
+:root[data-theme="light"] .result-hero .fmvp small,
+:root[data-theme="light"] .result-hero .fmvp b {
+  color: #0e7490;
 }
 
 /* 次要文字灰 --muted 默认是照深色底写的 #94a3b8，压在白底上只有 2.54:1；浅色主题的

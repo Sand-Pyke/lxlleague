@@ -77,6 +77,12 @@ export type TeamsBoard = {
     has_score: boolean;
   }[];
   budget: number;
+  fmvp: {
+    user_id: number;
+    username: string;
+    game_name: string;
+    avatar: string;
+  } | null;
 };
 
 type Props = {

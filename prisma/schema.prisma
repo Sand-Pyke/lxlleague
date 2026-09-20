@@ -39,6 +39,7 @@ model User {
   profile         PlayerProfile?
   signups         MatchSignup[]
   gameRecords     MatchGameRecord[]
+  fmvpMatches     Match[]           @relation("MatchFmvp")
 
   @@index([status])
 }
@@ -84,12 +85,15 @@ model Match {
   currentRound Int               @default(1)
   teamOneId    Int?
   teamTwoId    Int?
+  /// 今日 FMVP：赛事最终 MVP 选手（可从已编排队伍的选手中选择）。
+  fmvpUserId   Int?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   signups      MatchSignup[]
   teams        Team[]
   teamOne      Team?             @relation("MatchTeamOne", fields: [teamOneId], references: [id], onDelete: SetNull)
   teamTwo      Team?             @relation("MatchTeamTwo", fields: [teamTwoId], references: [id], onDelete: SetNull)
+  fmvpUser     User?             @relation("MatchFmvp", fields: [fmvpUserId], references: [id], onDelete: SetNull)
   rounds       MatchRound[]
   scores       MatchScore[]
   gameRecords  MatchGameRecord[]

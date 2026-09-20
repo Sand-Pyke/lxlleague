@@ -104,6 +104,12 @@ export default async function Result({
         ) : (
           <p className="round-state">{roundTitle(match.current_round, match.total_rounds)}</p>
         )}
+        {match.fmvp_name ? (
+          <div className="fmvp">
+            <small>今日FMVP</small>
+            <b>{match.fmvp_name}</b>
+          </div>
+        ) : null}
         <span>
           {formatMatchDate(match.date)} ·{" "}
           {match.status === "FINISHED" ? "比赛已结束" : "比赛进行中"}
@@ -148,6 +154,7 @@ export default async function Result({
                     className={game.game_no === shownGame ? "selected" : ""}
                     key={game.game_no}
                     href={`/matches/${id}/result?round=${selectedRound}&t1=${selectedPair.team_one_id}&t2=${selectedPair.team_two_id}&game=${game.game_no}`}
+                    scroll={false}
                   >
                     GAME {game.game_no}
                   </Link>

@@ -1,6 +1,6 @@
 "use client";
 
-import { PlusOutlined, ReloadOutlined, SettingOutlined, SolutionOutlined } from "@ant-design/icons";
+import { PlusOutlined, ReloadOutlined, SettingOutlined, SolutionOutlined, TrophyOutlined } from "@ant-design/icons";
 import {
   Alert,
   Button,
@@ -84,6 +84,8 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
   const [scoreOpen, setScoreOpen] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(false);
   const [recordsOpen, setRecordsOpen] = useState(false);
+  const [fmvpOpen, setFmvpOpen] = useState(false);
+  const [fmvpUserId, setFmvpUserId] = useState<number | null>(null);
 
   const selected = useMemo(
     () => matches.find((match) => match.id === selectedId) ?? null,
@@ -423,6 +425,22 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
               >
                 结束本轮
               </Button>
+              <Button
+                size="small"
+                icon={<TrophyOutlined />}
+                disabled={!board?.teams.length || Boolean(board?.fmvp)}
+                onClick={() => {
+                  setFmvpUserId(board?.fmvp?.user_id ?? null);
+                  setFmvpOpen(true);
+                }}
+              >
+                今日FMVP
+              </Button>
+              {board?.fmvp ? (
+                <Typography.Text type="secondary">
+                  FMVP：{board.fmvp.game_name || board.fmvp.username}
+                </Typography.Text>
+              ) : null}
             </Space>
 
             <Space wrap>
@@ -722,6 +740,46 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
               title="当前轮次没有可录入的对阵，请先完成队伍编排并结束选人开赛。"
             />
           )}
+        </Space>
+      </Modal>
+
+      <Modal
+        open={fmvpOpen}
+        title="设置今日 FMVP"
+        okText="确定"
+        cancelText="取消"
+        confirmLoading={busy}
+        onCancel={() => setFmvpOpen(false)}
+        onOk={() => {
+          if (!selected || !fmvpUserId) {
+            message.error("请选择 FMVP 选手");
+            return;
+          }
+          void run(
+            () => postJson(`/api/admin/match/fmvp/${selected.id}`, { userId: fmvpUserId }),
+            "今日 FMVP 已设置",
+          ).then((succeeded) => {
+            if (succeeded) setFmvpOpen(false);
+          });
+        }}
+      >
+        <Space orientation="vertical" size={10} style={{ width: "100%" }}>
+          <Alert type="warning" showIcon title="今日 FMVP 设置后不可更改，请确认所选选手。" />
+          <Typography.Text type="secondary">
+            从已编排进队伍的参赛选手中选择今日 FMVP。
+          </Typography.Text>
+          <Select
+            style={{ width: "100%" }}
+            placeholder="请选择选手"
+            value={fmvpUserId ?? undefined}
+            options={(board?.signs ?? [])
+              .filter((sign) => sign.team_id !== null)
+              .map((sign) => ({
+                value: sign.user_id,
+                label: `${sign.yy_name || sign.username}（${sign.game_name || "无游戏ID"}）`,
+              }))}
+            onChange={(value) => setFmvpUserId(value)}
+          />
         </Space>
       </Modal>
 
