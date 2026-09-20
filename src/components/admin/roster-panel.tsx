@@ -4,7 +4,6 @@ import {
   ArrowDownOutlined,
   ArrowUpOutlined,
   ReloadOutlined,
-  SwapOutlined,
   UserAddOutlined,
 } from "@ant-design/icons";
 import {
@@ -35,6 +34,7 @@ export type RosterTeam = {
   id: number;
   match_id: number;
   name: string;
+  sort_order: number;
   player_count: number;
   used_fee: number;
 };
@@ -117,8 +117,8 @@ export function RosterPanel({ board, loading, onReload }: Props) {
   const [poolRank, setPoolRank] = useState("all");
   const [poolPos, setPoolPos] = useState("all");
   const [poolKeyword, setPoolKeyword] = useState("");
-  // 选人顺序：默认按已用费用升序，点「重新生成」时同费用随机（与旧后台一致）。
-  const [pickOrder, setPickOrder] = useState<number[]>([]);
+  // 拖拽排序：记录正在拖动的队伍 id，松手时交换两队的顺位。
+  const [dragTeamId, setDragTeamId] = useState<number | null>(null);
   // 预算不足时的临时调额弹窗（记录被拦截的选手与队内已用费用）。
   const [budgetBlock, setBudgetBlock] = useState<{
     signId: number;
@@ -172,16 +172,14 @@ export function RosterPanel({ board, loading, onReload }: Props) {
     });
   }, [unassigned, formalIds, poolFilter, poolRank, poolPos, poolKeyword]);
 
-  /** 队伍按选人顺序排列：新队伍自动补到末尾（默认仍按费用升序）。 */
-  const orderedTeams = useMemo(() => {
-    const byFee = [...teams].sort((a, b) => a.used_fee - b.used_fee);
-    const ids = pickOrder.filter((id) => teams.some((team) => team.id === id));
-    const ordered = ids
-      .map((id) => teams.find((team) => team.id === id))
-      .filter((team): team is RosterTeam => Boolean(team));
-    const missing = byFee.filter((team) => !ids.includes(team.id));
-    return [...ordered, ...missing];
-  }, [teams, pickOrder]);
+  /** 队伍按持久化顺位（sortOrder）排列，后端已排序返回；这里再按 sort_order 稳定一次。 */
+  const orderedTeams = useMemo(
+    () =>
+      [...teams].sort(
+        (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.id - b.id,
+      ),
+    [teams],
+  );
 
   const usedTeamNames = useMemo(() => teams.map((team) => team.name.toUpperCase()), [teams]);
 
@@ -241,16 +239,43 @@ export function RosterPanel({ board, loading, onReload }: Props) {
     setOverrideBudget(team.used_fee + sign.fee);
   };
 
+  /** 拖拽松手时交换两队顺位并持久化。 */
+  function handleTeamDrop(targetId: number) {
+    if (dragTeamId === null || dragTeamId === targetId) return;
+    const ids = orderedTeams.map((team) => team.id);
+    const from = ids.indexOf(dragTeamId);
+    const to = ids.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    [ids[from], ids[to]] = [ids[to], ids[from]];
+    void run(
+      () => postJson("/api/admin/team/reorder", { matchId: match.id, teamIds: ids }),
+      "队伍顺位已更新",
+    );
+    setDragTeamId(null);
+  }
+
   function TeamCard({ team, pickIndex }: { team: RosterTeam; pickIndex: number }) {
     const members = signs
       .filter((sign) => sign.team_id === team.id)
       .sort((a, b) => a.pos_order - b.pos_order || a.id - b.id);
     const overBudget = match.use_fee && team.used_fee > budget;
+    const isDragging = dragTeamId === team.id;
 
     return (
       <Card
-        className="antd-panel"
+        className={isDragging ? "antd-panel team-dragging" : "antd-panel"}
         size="small"
+        draggable
+        onDragStart={(event) => {
+          setDragTeamId(team.id);
+          event.dataTransfer.effectAllowed = "move";
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          handleTeamDrop(team.id);
+        }}
+        onDragEnd={() => setDragTeamId(null)}
         title={
           <Space>
             <Typography.Text strong>{team.name}</Typography.Text>
@@ -405,25 +430,9 @@ export function RosterPanel({ board, loading, onReload }: Props) {
         title="可选的战队代号（点击建队）"
         extra={
           <Space size={4}>
-            <Tooltip title="选人顺序：已用费用低的队伍先选，同费用随机">
-              <Button
-                size="small"
-                icon={<SwapOutlined />}
-                disabled={teams.length < 2}
-                onClick={() =>
-                  setPickOrder(
-                    [...teams]
-                      .sort((a, b) => a.used_fee - b.used_fee || Math.random() - 0.5)
-                      .map((team) => team.id),
-                  )
-                }
-              >
-                重新生成队伍的顺序
-              </Button>
-            </Tooltip>
             {teams.length ? (
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                {orderedTeams.map((team, index) => `${index + 1}.${team.name}`).join(" - ")}
+                顺位：{orderedTeams.map((team, index) => `${index + 1}.${team.name}`).join(" - ")}（拖拽下方卡片可调换）
               </Typography.Text>
             ) : null}
           </Space>

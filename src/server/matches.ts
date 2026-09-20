@@ -40,7 +40,7 @@ function validId(id: string | number) {
 async function loadMatchBundle(matchId: number) {
   const [match, teams, signs, rounds, scores, records] = await Promise.all([
     prisma.match.findUnique({ where: { id: matchId } }),
-    prisma.team.findMany({ where: { matchId }, orderBy: { id: "asc" } }),
+    prisma.team.findMany({ where: { matchId }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
     prisma.matchSignup.findMany({ where: { matchId } }),
     prisma.matchRound.findMany({ where: { matchId }, orderBy: [{ roundNo: "asc" }, { id: "asc" }] }),
     prisma.matchScore.findMany({ where: { matchId } }),

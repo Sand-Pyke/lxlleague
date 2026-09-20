@@ -124,7 +124,10 @@ export async function finishMatch(matchId: number) {
   const match = await requireMatch(matchId);
   if (match.status !== "LIVE") throw badRequest("只有进行中的赛事才能结束");
 
-  const teams = await prisma.team.findMany({ where: { matchId }, orderBy: { id: "asc" } });
+  const teams = await prisma.team.findMany({
+    where: { matchId },
+    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+  });
   // 淘汰赛按轮次自动结束：结束最后一轮时 endRound 会把状态置为 FINISHED，
   // 这里禁止手动结束，避免「还没点结束本轮就能结束赛事」的漏洞。
   if (isBracketTeamCount(teams.length)) {
@@ -191,7 +194,7 @@ export async function deleteMatch(matchId: number) {
 export async function teamsBoard(matchId: number) {
   const match = await requireMatch(matchId);
   const [teams, signs, scores, frozenRounds] = await Promise.all([
-    prisma.team.findMany({ where: { matchId }, orderBy: { id: "asc" } }),
+    prisma.team.findMany({ where: { matchId }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
     prisma.matchSignup.findMany({
       where: { matchId },
       orderBy: [{ positionOrder: "asc" }, { id: "asc" }],
@@ -282,6 +285,7 @@ export async function teamsBoard(matchId: number) {
       id: team.id,
       match_id: team.matchId,
       name: team.name,
+      sort_order: team.sortOrder,
       player_count: signs.filter((sign) => sign.teamId === team.id).length,
       used_fee: usedByTeam.get(team.id) ?? 0,
     })),

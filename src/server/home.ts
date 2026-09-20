@@ -69,7 +69,7 @@ export async function getHomeBoardV2() {
   const liveMatches = await Promise.all(
     lives.map(async (match) => {
       const [teams, signs] = await Promise.all([
-        prisma.team.findMany({ where: { matchId: match.id }, orderBy: { id: "asc" } }),
+        prisma.team.findMany({ where: { matchId: match.id }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
         prisma.matchSignup.findMany({
           where: { matchId: match.id },
           include: { user: { include: { profile: { select: { rank: true } } } } },

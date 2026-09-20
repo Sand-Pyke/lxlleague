@@ -162,7 +162,10 @@ export async function endRound(matchId: number) {
   if (match.status === "CREATED") return { kind: "not_started" as const };
   if (match.status === "FINISHED") return { kind: "already_finished" as const };
 
-  const teams = await prisma.team.findMany({ where: { matchId }, orderBy: { id: "asc" } });
+  const teams = await prisma.team.findMany({
+    where: { matchId },
+    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+  });
   if (!isBracketTeamCount(teams.length)) return { kind: "bad_team_count" as const };
 
   const roundNo = match.currentRound || 1;
@@ -305,7 +308,7 @@ export async function setScore(input: {
 /** 队伍名映射 + 每队已用费用。 */
 export async function teamUsage(matchId: number) {
   const [teams, signs] = await Promise.all([
-    prisma.team.findMany({ where: { matchId }, orderBy: { id: "asc" } }),
+    prisma.team.findMany({ where: { matchId }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
     prisma.matchSignup.findMany({
       where: { matchId },
       include: { user: { include: { profile: { select: { rank: true } } } } },
@@ -329,8 +332,14 @@ async function syncTeamCount(matchId: number) {
 export async function createTeam(matchId: number, name: string) {
   const match = await prisma.match.findUnique({ where: { id: matchId } });
   if (!match) return { kind: "match_not_found" as const };
+  // 新队伍顺位排到末尾（当前最大 sortOrder + 1）。
+  const maxOrder = await prisma.team.aggregate({
+    where: { matchId },
+    _max: { sortOrder: true },
+  });
+  const sortOrder = (maxOrder._max.sortOrder ?? 0) + 1;
   try {
-    await prisma.team.create({ data: { matchId, name } });
+    await prisma.team.create({ data: { matchId, name, sortOrder } });
   } catch (error) {
     if ((error as { code?: string }).code === "P2002") return { kind: "duplicate" as const };
     throw error;
@@ -351,6 +360,22 @@ export async function deleteTeam(teamId: number) {
     prisma.team.delete({ where: { id: teamId } }),
   ]);
   await syncTeamCount(team.matchId);
+  return { kind: "ok" as const };
+}
+
+/** 重排队伍顺位：按传入的 teamIds 顺序写入 sortOrder（1..n），决定对战配对顺序。 */
+export async function reorderTeams(matchId: number, teamIds: number[]) {
+  const teams = await prisma.team.findMany({ where: { matchId }, select: { id: true } });
+  if (teams.length !== teamIds.length || new Set(teamIds).size !== teamIds.length) {
+    return { kind: "team_mismatch" as const };
+  }
+  const idSet = new Set(teams.map((team) => team.id));
+  if (!teamIds.every((id) => idSet.has(id))) return { kind: "team_mismatch" as const };
+  await prisma.$transaction(
+    teamIds.map((id, index) =>
+      prisma.team.update({ where: { id }, data: { sortOrder: index + 1 } }),
+    ),
+  );
   return { kind: "ok" as const };
 }
 

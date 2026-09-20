@@ -458,6 +458,14 @@ a {
   gap: 16px;
   margin-top: 16px;
 }
+/* 队伍卡片拖拽排序：拖动中的卡片半透明提示，卡片可抓取。 */
+.admin-grid .ant-card[draggable="true"] {
+  cursor: grab;
+}
+.admin-grid .team-dragging {
+  opacity: 0.55;
+  cursor: grabbing;
+}
 .panel {
   padding: 22px;
 }
