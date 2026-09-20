@@ -514,7 +514,7 @@ export async function gameDetail(matchId: number, gameNo: number) {
 
 type RankedRecord = Pick<
   MatchGameRecord,
-  "matchId"
+  | "matchId"
   | "champion"
   | "result"
   | "kills"
@@ -726,6 +726,21 @@ export async function profileOverview(userId: number, includeCoreAdmin = false) 
   const names = new Map(matches.map((match) => [match.id, match.name]));
 
   // 参战率 = (击杀+助攻) / 同场次同局同队的击杀总和，上限 100%（与赛果页口径一致）。
+  // 战绩的 teamId 可能为空（手工录入与旧版自动导入），此时回落到报名时的队伍。
+  const signupTeams = matchIds.length
+    ? await prisma.matchSignup.findMany({
+        where: { matchId: { in: [...new Set(matchIds)] } },
+        select: { matchId: true, userId: true, teamId: true },
+      })
+    : [];
+  const signupTeamByUserMatch = new Map(
+    signupTeams.map((signup) => [`${signup.matchId}-${signup.userId}`, signup.teamId]),
+  );
+  const teamIdOf = (record: { matchId: number | null; userId: number; teamId: number | null }) =>
+    record.teamId ??
+    (record.matchId === null
+      ? null
+      : (signupTeamByUserMatch.get(`${record.matchId}-${record.userId}`) ?? null));
   const scopeKey = (row: {
     matchId: number | null;
     roundNo: number;
@@ -737,22 +752,38 @@ export async function profileOverview(userId: number, includeCoreAdmin = false) 
     { matchId: number; roundNo: number; gameNo: number; teamId: number }
   >();
   for (const record of records) {
-    if (record.matchId === null || record.teamId === null) continue;
+    const teamId = teamIdOf(record);
+    if (record.matchId === null || teamId === null) continue;
     scopes.set(scopeKey(record), {
       matchId: record.matchId,
       roundNo: record.roundNo,
       gameNo: record.gameNo,
-      teamId: record.teamId,
+      teamId,
     });
   }
   const teamKills = new Map<string, number>();
   if (scopes.size) {
     const rows = await prisma.matchGameRecord.findMany({
-      where: { OR: [...scopes.values()] },
-      select: { matchId: true, roundNo: true, gameNo: true, teamId: true, kills: true },
+      where: {
+        OR: [...scopes.values()].map(({ matchId, roundNo, gameNo }) => ({
+          matchId,
+          roundNo,
+          gameNo,
+        })),
+      },
+      select: {
+        matchId: true,
+        userId: true,
+        roundNo: true,
+        gameNo: true,
+        teamId: true,
+        kills: true,
+      },
     });
     for (const row of rows) {
-      const key = scopeKey(row);
+      const teamId = teamIdOf(row);
+      if (row.matchId === null || teamId === null) continue;
+      const key = scopeKey({ ...row, teamId });
       teamKills.set(key, (teamKills.get(key) ?? 0) + row.kills);
     }
   }
@@ -815,7 +846,18 @@ export async function profileOverview(userId: number, includeCoreAdmin = false) 
       is_mvp: record.isMvp,
       is_svp: record.isSvp,
       participation: (() => {
-        const total = teamKills.get(scopeKey(record)) ?? 0;
+        const teamId = teamIdOf(record);
+        const total =
+          teamId === null
+            ? 0
+            : (teamKills.get(
+                scopeKey({
+                  matchId: record.matchId,
+                  roundNo: record.roundNo,
+                  gameNo: record.gameNo,
+                  teamId,
+                }),
+              ) ?? 0);
         if (!total) return 0;
         return Math.min(100, round(((record.kills + record.assists) * 100) / total));
       })(),

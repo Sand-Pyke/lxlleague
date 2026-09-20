@@ -176,6 +176,7 @@ export function RecordPanel({
   const [editDraft, setEditDraft] = useState<RowDraft | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
   const [roundFilter, setRoundFilter] = useState<number>(0);
+  const [playerFilter, setPlayerFilter] = useState("");
 
   // 自动导入（LCU agent）用的令牌：只存在管理员自己身上，可重置。
   const [importToken, setImportToken] = useState("");
@@ -234,9 +235,7 @@ export function RecordPanel({
         const nextGame = list.reduce((max, row) => Math.max(max, row.game_no), 0) + 1;
         setGameNo(Math.min(nextGame, maxGameNo));
         // 新录入默认落在当前轮，避免和赛果页（默认展示当前轮）错开。
-        setRoundNo(
-          currentRound || list.reduce((max, row) => Math.max(max, row.round_no), 0) || 1,
-        );
+        setRoundNo(currentRound || list.reduce((max, row) => Math.max(max, row.round_no), 0) || 1);
       } else {
         setRows([]);
         setGameNo(1);
@@ -274,9 +273,7 @@ export function RecordPanel({
   }, [signs, useSignups, users]);
 
   const maxRound =
-    totalRounds && totalRounds > 0
-      ? totalRounds
-      : Math.max(...rows.map((row) => row.round_no), 1);
+    totalRounds && totalRounds > 0 ? totalRounds : Math.max(...rows.map((row) => row.round_no), 1);
 
   const roundOptions = useMemo(
     () =>
@@ -286,10 +283,14 @@ export function RecordPanel({
     [rows, maxRound],
   );
 
-  const shownRows = useMemo(
-    () => (roundFilter ? rows.filter((row) => row.round_no === roundFilter) : rows),
-    [rows, roundFilter],
-  );
+  const shownRows = useMemo(() => {
+    const query = playerFilter.trim().toLocaleLowerCase();
+    return rows.filter((row) => {
+      const matchesRound = !roundFilter || row.round_no === roundFilter;
+      const matchesPlayer = !query || row.game_name.toLocaleLowerCase().includes(query);
+      return matchesRound && matchesPlayer;
+    });
+  }, [rows, roundFilter, playerFilter]);
 
   async function run(action: () => Promise<Record<string, unknown>>, fallback: string) {
     setBusy(true);
@@ -891,6 +892,15 @@ export function RecordPanel({
                 value={roundFilter || undefined}
                 options={roundOptions}
                 onChange={(value) => setRoundFilter(value ? Number(value) : 0)}
+              />
+              <Typography.Text type="secondary">按玩家昵称：</Typography.Text>
+              <Input
+                allowClear
+                size="small"
+                style={{ width: 180 }}
+                placeholder="输入昵称模糊查询"
+                value={playerFilter}
+                onChange={(event) => setPlayerFilter(event.target.value)}
               />
             </Space>
             <Table
