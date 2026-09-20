@@ -1940,6 +1940,101 @@ a.bracket-team:hover {
   letter-spacing: 0.5px;
 }
 
+/* 两队在打（决赛）时改用「XX vs XX」：每队各一张卡片，中间用 VS 分隔。 */
+.bracket-final {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 6px 2px;
+}
+
+/* 仅在赛事详情页 hero 里把决赛对阵绝对定位到卡片中央；
+   赛果页 / 阵容页等其它地方仍按正常文档流排列，避免重叠。 */
+.match-hero .bracket-final {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.bracket-final-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: 96px;
+  color: #e2e8f0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.bracket-final-logo {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 16px;
+  color: var(--muted);
+  font-size: 22px;
+  font-weight: 800;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.bracket-final-logo img {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  border-radius: 12px;
+}
+
+.bracket-final-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bracket-final-vs {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.bracket-final-score {
+  font-weight: 800;
+  color: #67e8f9;
+}
+
+.bracket-final-team--winner .bracket-final-name {
+  color: #fbbf24;
+  font-weight: 700;
+}
+
+.bracket-final-team--loser {
+  opacity: 0.62;
+}
+
+.bracket-final-team--pending {
+  color: var(--muted);
+  font-style: italic;
+}
+
+:root[data-theme="light"] .bracket-final-team {
+  color: #172033;
+}
+
+:root[data-theme="light"] .bracket-final-score {
+  color: #0e7490;
+}
+
+:root[data-theme="light"] .bracket-final-team--winner .bracket-final-name {
+  color: #a16207;
+}
+
 :root[data-theme="light"] .bracket-round-title {
   color: #6d28d9;
 }

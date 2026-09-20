@@ -67,6 +67,41 @@ function TeamRow({
   );
 }
 
+/** 两队在打（决赛）时的紧凑队伍行：只展示队徽 + 队名（+ 比分），不带链接。 */
+function FinalTeam({
+  name,
+  score,
+  showScore,
+  winner,
+  loser,
+}: {
+  name: string;
+  score: number | null;
+  showScore: boolean;
+  winner: boolean;
+  loser: boolean;
+}) {
+  const logo = teamLogo(name);
+  const pending = name === "待定";
+  const classes = [
+    "bracket-final-team",
+    winner ? "bracket-final-team--winner" : "",
+    loser ? "bracket-final-team--loser" : "",
+    pending ? "bracket-final-team--pending" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return (
+    <span className={classes}>
+      <span className="bracket-final-logo">
+        {logo ? <img src={logo} alt={name} /> : pending ? "?" : name.slice(0, 2)}
+      </span>
+      <span className="bracket-final-name">{name}</span>
+      {showScore ? <span className="bracket-final-score">{score ?? 0}</span> : null}
+    </span>
+  );
+}
+
 /**
  * 单败淘汰对阵图：总轮次 → 各轮对阵（数据缺失的轮次用「待定」占位）。
  * 首轮队伍数从第 1 轮的完整对阵推导（2/4/8/16/32 队）。
@@ -76,6 +111,46 @@ export function Bracket({ rounds, totalRounds, matchId, championName }: Props) {
   const teamCount = firstRoundPairs.length * 2;
 
   if (teamCount === 0) return <p className="result-note">暂无对阵安排</p>;
+
+  // 只有两队时就是决赛：用一行「XX vs XX」展示，避免两行卡片占满整行。
+  if (teamCount === 2) {
+    const pair = firstRoundPairs[0];
+    const team1 = pair?.team1 || "待定";
+    const team2 = pair?.team2 || "待定";
+    const score1 = pair ? pair.score[0] : null;
+    const score2 = pair ? pair.score[1] : null;
+    const showScore = Boolean(
+      pair?.has_score || (score1 !== null && score2 !== null && (score1 > 0 || score2 > 0)),
+    );
+    const winner =
+      score1 !== null && score2 !== null && score1 !== score2
+        ? score1 > score2
+          ? ("team1" as const)
+          : ("team2" as const)
+        : null;
+    return (
+      <>
+        <div className="bracket-final">
+          <FinalTeam
+            name={team1}
+            score={score1}
+            showScore={showScore}
+            winner={winner === "team1"}
+            loser={winner === "team2"}
+          />
+          <span className="bracket-final-vs">VS</span>
+          <FinalTeam
+            name={team2}
+            score={score2}
+            showScore={showScore}
+            winner={winner === "team2"}
+            loser={winner === "team1"}
+          />
+        </div>
+        {championName ? <p className="bracket-champion">🏆 冠军 · {championName}</p> : null}
+      </>
+    );
+  }
 
   const bracketRounds = Array.from({ length: totalRounds }, (_, index) => {
     const roundNo = index + 1;

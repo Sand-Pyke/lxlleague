@@ -21,7 +21,7 @@ export default async function MatchDetail({ params }: { params: Promise<{ id: st
       <div className="back">
         <Link href="/matches">← 返回赛事中心</Link>
       </div>
-      <section className="match-hero">
+      <section className="match-hero" style={{position: "relative"}}>
         <div className="match-hero-schedule">
           <div className="match-hero-head">
             <div className="match-hero-head-info">
