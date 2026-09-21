@@ -17,18 +17,38 @@ const isProduction = process.env.NODE_ENV === "production";
  * 去掉会直接把站点打白屏。它挡不住「注入进页面里的内联脚本」，但能挡住站外脚本加载、
  * 站外数据外发、iframe 嵌套与站外表单提交，是成本很低的一层兜底。
  */
-const contentSecurityPolicy = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isProduction ? "" : " 'unsafe-eval'"}`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  "connect-src 'self'" + (isProduction ? "" : " ws: http://localhost:* http://127.0.0.1:*"),
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'self'",
-].join("; ");
+/** OSS 直传只放行当前配置的 Bucket，不能放宽到所有阿里云域名。 */
+function ossConnectSource() {
+  const bucket = process.env.OSS_BUCKET?.trim();
+  const region = process.env.OSS_REGION?.trim();
+  // 环境变量最终会写入响应头，先限制为 OSS 域名允许的字符，避免配置错误污染 CSP。
+  if (
+    !bucket ||
+    !region ||
+    !/^[a-z0-9][a-z0-9-]*$/i.test(bucket) ||
+    !/^[a-z0-9][a-z0-9-]*$/i.test(region)
+  ) {
+    return "";
+  }
+  return ` https://${bucket}.${region}.aliyuncs.com`;
+}
+
+function contentSecurityPolicy() {
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'unsafe-inline'${isProduction ? "" : " 'unsafe-eval'"}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "connect-src 'self'" +
+      ossConnectSource() +
+      (isProduction ? "" : " ws: http://localhost:* http://127.0.0.1:*"),
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'self'",
+  ].join("; ");
+}
 
 function requestHost(request: NextRequest) {
   const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
@@ -78,7 +98,7 @@ export function middleware(request: NextRequest) {
   }
 
   const response = NextResponse.next();
-  response.headers.set("Content-Security-Policy", contentSecurityPolicy);
+  response.headers.set("Content-Security-Policy", contentSecurityPolicy());
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "SAMEORIGIN");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
