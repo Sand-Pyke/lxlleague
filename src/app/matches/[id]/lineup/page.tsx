@@ -101,13 +101,13 @@ export default async function Lineup({
                   <article key={row.pos}>
                     <span>{row.pos}</span>
                     {row.name ? (
-                      <>
+                      <Link className="lineup-player" href={`/profile?uid=${row.userId}`}>
                         <img src={row.avatar || undefined} alt="" />
                         <b>{row.name}</b>
                         <em>
                           <RankLabel rank={row.rank} fallback="未定段" />
                         </em>
-                      </>
+                      </Link>
                     ) : (
                       <em>— 空 —</em>
                     )}
@@ -122,13 +122,13 @@ export default async function Lineup({
                 {pair.team2.rows.map((row) => (
                   <article key={row.pos}>
                     {row.name ? (
-                      <>
+                      <Link className="lineup-player" href={`/profile?uid=${row.userId}`}>
                         <em>
                           <RankLabel rank={row.rank} fallback="未定段" />
                         </em>
                         <b>{row.name}</b>
                         <img src={row.avatar || undefined} alt="" />
-                      </>
+                      </Link>
                     ) : (
                       <em>— 空 —</em>
                     )}

@@ -1477,6 +1477,20 @@ a {
   border-radius: 50%;
   background: #475569;
 }
+.lineup-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 8px;
+}
+.lineup-player:hover b,
+.lineup-player:focus-visible b {
+  color: var(--accent, #a78bfa);
+}
 .lineup article b {
   font-size: 14px;
   flex: 1;

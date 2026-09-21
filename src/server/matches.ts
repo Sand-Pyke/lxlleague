@@ -145,10 +145,11 @@ function lineupRows(
   const members = teamId ? signs.filter((sign) => sign.teamId === teamId) : [];
   return POSITIONS.map((position: Position) => {
     const sign = members.find((member) => member.teamPosition === position);
-    if (!sign) return { pos: position, name: "", rank: "", avatar: "" };
+    if (!sign) return { pos: position, userId: null, name: "", rank: "", avatar: "" };
     const profile = ranks.get(sign.userId);
     return {
       pos: position,
+      userId: sign.userId,
       // 对战预览优先展示游戏ID（召唤师名），没设置再回退到报名昵称/账户名。
       name: profile?.gameName || sign.displayName || profile?.name || "",
       rank: profile?.rank ?? "",
