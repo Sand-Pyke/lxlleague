@@ -27,6 +27,7 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
       CAPTCHA_SECRET: ${CAPTCHA_SECRET:?CAPTCHA_SECRET is required}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
     ports:
       - "${APP_PORT:-3000}:3000"
     healthcheck:

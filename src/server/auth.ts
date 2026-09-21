@@ -5,14 +5,79 @@ import bcrypt from "bcryptjs";
 import { normalizeRank } from "@/lib/admin-options";
 import { prisma } from "@/lib/prisma";
 
-const cookieName = "lxl_user_id";
+// 更换旧 Cookie 名，彻底忽略历史上可伪造的 `lxl_user_id`；生产环境再用
+// __Host- 前缀让浏览器强制要求 Secure、Path=/ 且不能指定 Domain。
+const cookieName = process.env.NODE_ENV === "production" ? "__Host-lxl_session" : "lxl_session";
 const captchaCookieName = "lxl_captcha";
 const captchaLifetimeSeconds = 5 * 60;
-const captchaSecret =
-  process.env.CAPTCHA_SECRET || process.env.ADMIN_PASSWORD || "lxl-development-captcha-secret";
+const sessionLifetimeSeconds = 60 * 60 * 24 * 7;
+
+/**
+ * 登录态不能把用户 ID 原样交给浏览器。生产环境优先使用独立的 SESSION_SECRET；
+ * 为兼容尚未新增该变量的部署，暂时回退到已有的 CAPTCHA_SECRET / ADMIN_PASSWORD。
+ */
+function resolveAuthSecret() {
+  const secret =
+    process.env.SESSION_SECRET || process.env.CAPTCHA_SECRET || process.env.ADMIN_PASSWORD;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("缺少 SESSION_SECRET / CAPTCHA_SECRET / ADMIN_PASSWORD，无法签发登录态");
+  }
+  return "lxl-development-secret";
+}
+
+const authSecret = resolveAuthSecret();
+
+function deriveKey(purpose: string) {
+  return createHmac("sha256", authSecret).update(`lol-champion:${purpose}`).digest();
+}
+
+const sessionKey = deriveKey("session");
+const captchaKey = deriveKey("captcha");
 
 function captchaSignature(payload: string) {
-  return createHmac("sha256", captchaSecret).update(payload).digest("base64url");
+  return createHmac("sha256", captchaKey).update(payload).digest("base64url");
+}
+
+function sessionSignature(payload: string) {
+  return createHmac("sha256", sessionKey).update(payload).digest("base64url");
+}
+
+function signatureMatches(expected: string, received: string | undefined) {
+  if (!received) return false;
+  const expectedBuffer = Buffer.from(expected);
+  const receivedBuffer = Buffer.from(received);
+  return (
+    expectedBuffer.length === receivedBuffer.length &&
+    timingSafeEqual(expectedBuffer, receivedBuffer)
+  );
+}
+
+function createSessionToken(userId: number) {
+  const payload = `${userId}.${Date.now() + sessionLifetimeSeconds * 1000}`;
+  return `${payload}.${sessionSignature(payload)}`;
+}
+
+function userIdFromToken(token: string | undefined) {
+  const parts = token?.split(".") ?? [];
+  if (parts.length !== 3) return null;
+  const [rawId, rawExpires, received] = parts;
+  const id = Number(rawId);
+  const expires = Number(rawExpires);
+  if (!Number.isInteger(id) || id <= 0 || !Number.isSafeInteger(expires)) return null;
+  if (expires < Date.now()) return null;
+  if (!signatureMatches(sessionSignature(`${rawId}.${rawExpires}`), received)) return null;
+  return id;
+}
+
+function isSecureRequest(request: NextRequest) {
+  const forwarded = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+  if (forwarded) return forwarded === "https";
+  return request.nextUrl.protocol === "https:";
+}
+
+function shouldUseSecureCookie(request: NextRequest) {
+  return process.env.NODE_ENV === "production" || isSecureRequest(request);
 }
 
 function captchaResponseError() {
@@ -44,7 +109,7 @@ function isValidCaptcha(request: NextRequest, value: unknown) {
 }
 
 /** Creates a short-lived, signed arithmetic challenge for registration. */
-export function createCaptcha() {
+export function createCaptcha(request: NextRequest) {
   const left = randomInt(2, 10);
   const right = randomInt(1, 10);
   const expiresAt = Date.now() + captchaLifetimeSeconds * 1000;
@@ -53,7 +118,7 @@ export function createCaptcha() {
   response.cookies.set(captchaCookieName, `${payload}.${captchaSignature(payload)}`, {
     httpOnly: true,
     sameSite: "strict",
-    secure: process.env.NODE_ENV === "production",
+    secure: shouldUseSecureCookie(request),
     path: "/api/register",
     maxAge: captchaLifetimeSeconds,
   });
@@ -61,16 +126,17 @@ export function createCaptcha() {
 }
 
 function userIdFrom(request: NextRequest) {
-  const value = Number(request.cookies.get(cookieName)?.value);
-  return Number.isInteger(value) && value > 0 ? value : null;
+  return userIdFromToken(request.cookies.get(cookieName)?.value);
 }
+
+const isActiveAccount = (status: string) => status === "APPROVED";
 
 /** Reads the current signed-in user for server components. */
 export async function getViewer() {
   const store = await cookies();
-  const id = Number(store.get(cookieName)?.value);
-  if (!Number.isInteger(id) || id <= 0) return null;
-  return prisma.user.findUnique({
+  const id = userIdFromToken(store.get(cookieName)?.value);
+  if (!id) return null;
+  const user = await prisma.user.findUnique({
     where: { id },
     select: {
       id: true,
@@ -82,38 +148,47 @@ export async function getViewer() {
       profile: { select: { mainPosition: true, subPosition: true, avatar: true } },
     },
   });
+  return user && isActiveAccount(user.status) ? user : null;
 }
 
 export async function getSessionUser(request: NextRequest) {
   const id = userIdFrom(request);
   if (!id) return null;
-  return prisma.user.findUnique({
+  const user = await prisma.user.findUnique({
     where: { id },
     select: { id: true, username: true, isAdmin: true, status: true },
   });
+  return user && isActiveAccount(user.status) ? user : null;
 }
 
 export async function getCurrentUser(request: NextRequest) {
   const user = await getSessionUser(request);
-  return NextResponse.json({
+  const response = NextResponse.json({
     login: Boolean(user),
     username: user?.username || "",
     is_admin: user?.isAdmin || false,
   });
+  response.headers.set("Cache-Control", "no-store, private");
+  return response;
 }
 
 function invalidInput() {
   return NextResponse.json({ ok: false, error: "用户名或密码格式不正确" }, { status: 400 });
 }
 
-function sessionResponse(user: { id: number; username: string; isAdmin: boolean }) {
+function sessionResponse(
+  user: { id: number; username: string; isAdmin: boolean },
+  request: NextRequest,
+) {
   const response = NextResponse.json({ ok: true, login: true, username: user.username });
-  response.cookies.set(cookieName, String(user.id), {
+  response.headers.set("Cache-Control", "no-store, private");
+  response.cookies.set(cookieName, createSessionToken(user.id), {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    // 微信等站外 WebView 点击链接时不携带既有会话，避免同一设备残留账号被直接恢复。
+    sameSite: "strict",
+    secure: shouldUseSecureCookie(request),
     path: "/",
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge: sessionLifetimeSeconds,
   });
   return response;
 }
@@ -147,7 +222,7 @@ export async function signIn(request: NextRequest) {
       { status: 403 },
     );
   }
-  return sessionResponse(user);
+  return sessionResponse(user, request);
 }
 
 export async function register(request: NextRequest) {
@@ -213,6 +288,8 @@ export async function requireAdmin(request: NextRequest) {
 
 export function signOut() {
   const response = NextResponse.json({ ok: true });
-  response.cookies.delete(cookieName);
+  response.headers.set("Cache-Control", "no-store, private");
+  response.cookies.delete({ name: cookieName, path: "/" });
+  response.cookies.delete({ name: "lxl_user_id", path: "/" });
   return response;
 }
