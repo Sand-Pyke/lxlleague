@@ -8,7 +8,9 @@ import { randomDefaultAvatar } from "@/lib/default-avatars";
 import { missingSignupRequirements } from "@/lib/profile-requirements";
 import { prisma } from "@/lib/prisma";
 
-const cookieName = "lxl_user_id";
+// 更换旧 Cookie 名，彻底忽略历史上可伪造的 `lxl_user_id`；生产环境再用
+// __Host- 前缀让浏览器强制要求 Secure、Path=/ 且不能指定 Domain。
+const cookieName = process.env.NODE_ENV === "production" ? "__Host-lxl_session" : "lxl_session";
 const captchaCookieName = "lxl_captcha";
 const captchaLifetimeSeconds = 5 * 60;
 const sessionLifetimeSeconds = 60 * 60 * 24 * 7;
@@ -97,6 +99,10 @@ function isSecureRequest(request: NextRequest) {
   return request.nextUrl.protocol === "https:";
 }
 
+function shouldUseSecureCookie(request: NextRequest) {
+  return process.env.NODE_ENV === "production" || isSecureRequest(request);
+}
+
 function captchaResponseError() {
   return NextResponse.json(
     { ok: false, code: "CAPTCHA_INVALID", error: "验证码错误或已过期，请重新获取" },
@@ -131,7 +137,7 @@ export function createCaptcha(request: NextRequest) {
   response.cookies.set(captchaCookieName, `${payload}.${signature(payload, captchaKey)}`, {
     httpOnly: true,
     sameSite: "strict",
-    secure: isSecureRequest(request),
+    secure: shouldUseSecureCookie(request),
     // 验证码会在 /api/captcha 生成、在 /api/register 提交；cookie 需要覆盖整个 API 域名下的
     // 注册相关接口，否则浏览器不会把它带到 POST /api/register 请求中。
     path: "/api",
@@ -195,11 +201,13 @@ export async function getSessionUser(request: NextRequest) {
 
 export async function getCurrentUser(request: NextRequest) {
   const user = await getSessionUser(request);
-  return NextResponse.json({
+  const response = NextResponse.json({
     login: Boolean(user),
     username: user?.username || "",
     is_admin: user?.isAdmin || false,
   });
+  response.headers.set("Cache-Control", "no-store, private");
+  return response;
 }
 
 function invalidInput(message = "用户名或密码格式不正确") {
@@ -266,10 +274,12 @@ function sessionResponse(
     profile_complete: profileComplete,
     is_admin: user.isAdmin,
   });
+  response.headers.set("Cache-Control", "no-store, private");
   response.cookies.set(cookieName, createSessionToken(user.id), {
     httpOnly: true,
-    sameSite: "lax",
-    secure: isSecureRequest(request),
+    // 微信等站外 WebView 点击链接时不携带既有会话，避免同一设备残留账号被直接恢复。
+    sameSite: "strict",
+    secure: shouldUseSecureCookie(request),
     path: "/",
     maxAge: sessionLifetimeSeconds,
   });
@@ -405,6 +415,8 @@ export async function requireAdmin(request: NextRequest) {
 
 export function signOut() {
   const response = NextResponse.json({ ok: true });
-  response.cookies.delete(cookieName);
+  response.headers.set("Cache-Control", "no-store, private");
+  response.cookies.delete({ name: cookieName, path: "/" });
+  response.cookies.delete({ name: "lxl_user_id", path: "/" });
   return response;
 }
