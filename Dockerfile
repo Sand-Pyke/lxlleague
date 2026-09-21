@@ -4,7 +4,7 @@ FROM node:20-bookworm-slim AS deps
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci
+RUN npm ci
 
 # 构建层：生成 Prisma Client + 编译 Next.js（output: "standalone"）
 FROM deps AS build
