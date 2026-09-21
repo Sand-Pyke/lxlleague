@@ -28,7 +28,7 @@ services:
       retries: 12
 
   migrate:
-    image: crpi-i9zdaj7focplqv2n-vpc.cn-hangzhou.personal.cr.aliyuncs.com/lol-champion/lxleague:migrate
+    image: crpi-i9zdaj7focplqv2n.cn-hangzhou.personal.cr.aliyuncs.com/lol-champion/lxleague:migrate
     mem_limit: 300m
     restart: "no"
     logging:
@@ -45,7 +45,7 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
 
   app:
-    image: crpi-i9zdaj7focplqv2n-vpc.cn-hangzhou.personal.cr.aliyuncs.com/lol-champion/lxleague:app
+    image: crpi-i9zdaj7focplqv2n.cn-hangzhou.personal.cr.aliyuncs.com/lol-champion/lxleague:app
     mem_limit: 800m
     restart: unless-stopped
     logging:
