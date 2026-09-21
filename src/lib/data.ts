@@ -59,6 +59,8 @@ export type Match = {
   /** 是否启用选手费用预算 */
   useFee: boolean;
   currentRound: number;
+  /** 是否为 LCU 自动导入的目标赛事（管理员在后台指定）。 */
+  importTarget: boolean;
   teamOneId: number | null;
   teamTwoId: number | null;
 };

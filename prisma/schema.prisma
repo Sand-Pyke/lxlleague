@@ -83,6 +83,8 @@ model Match {
   useFee       Boolean           @default(true)
   recordsConfirmed Boolean        @default(false)
   currentRound Int               @default(1)
+  /// LCU 自动导入的目标赛事：管理员在后台点选，agent 的导入上下文据此定位写入目标。
+  importTarget Boolean           @default(false)
   teamOneId    Int?
   teamTwoId    Int?
   /// 今日 FMVP：赛事最终 MVP 选手（可从已编排队伍的选手中选择）。

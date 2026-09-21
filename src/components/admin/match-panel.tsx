@@ -63,6 +63,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
   const [statusFilter, setStatusFilter] = useState<MatchStatus | "ALL">("ALL");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [importBusyId, setImportBusyId] = useState<number | null>(null);
 
   const [board, setBoard] = useState<TeamsBoard | null>(null);
   const [boardLoading, setBoardLoading] = useState(false);
@@ -152,6 +153,20 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
     }
   }
 
+  /** 把某场赛事设为 LCU 自动导入的目标：后台点选后，agent 的导入上下文据此定位。 */
+  async function markImportTarget(matchId: number) {
+    setImportBusyId(matchId);
+    try {
+      const data = await postJson(`/api/admin/match/import_target/${matchId}`, {});
+      message.success(successText(data, "已设为导入目标"));
+      await loadMatches();
+    } catch (requestError) {
+      message.error(errorText(requestError, "设置导入目标失败"));
+    } finally {
+      setImportBusyId(null);
+    }
+  }
+
   const teamNameOf = (id: number | undefined | null) =>
     board?.teams.find((team) => team.id === id)?.name ?? (id ? `队伍 #${id}` : "");
 
@@ -167,7 +182,10 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
       key: "name",
       render: (_, match) => (
         <Space orientation="vertical" size={0}>
-          <Typography.Text strong>{match.name}</Typography.Text>
+          <Space size={6}>
+            <Typography.Text strong>{match.name}</Typography.Text>
+            {match.importTarget ? <Tag color="green">导入目标</Tag> : null}
+          </Space>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {match.round} · {match.date ? new Date(match.date).toLocaleString("zh-CN") : "时间待定"}
           </Typography.Text>
@@ -219,7 +237,7 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
     {
       title: "操作",
       key: "actions",
-      width: 160,
+      width: 230,
       render: (_, match) => (
         <Space size={4}>
           <Button
@@ -228,6 +246,14 @@ export function MatchPanel({ onChanged }: { onChanged?: () => void }) {
             onClick={() => setSelectedId(match.id)}
           >
             管理
+          </Button>
+          <Button
+            size="small"
+            loading={importBusyId === match.id}
+            disabled={match.importTarget}
+            onClick={() => void markImportTarget(match.id)}
+          >
+            {match.importTarget ? "已是目标" : "设为目标"}
           </Button>
           {match.status === "CREATED" ? (
             <Popconfirm

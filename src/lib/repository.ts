@@ -18,6 +18,7 @@ export function matchFrom(match: DbMatch, signed = false): Match {
     liveUrl: match.liveUrl,
     useFee: match.useFee,
     currentRound: match.currentRound,
+    importTarget: match.importTarget,
     teamOneId: match.teamOneId,
     teamTwoId: match.teamTwoId,
   };

@@ -64,10 +64,22 @@ export async function importContext(request: NextRequest) {
     // 只允许写入「进行中」或「已结束」的赛事：已结束的赛事用于补录战绩，
     // 但绝不回退到 CREATED（未开赛）的赛事 —— agent 是长驻进程，误导入的
     // 代价远大于让管理员先把赛事标记为进行中。
-    const match = await prisma.match.findFirst({
-      where: { status: { in: ["LIVE", "FINISHED"] } },
-      orderBy: { id: "desc" },
-    });
+    // 目标优先取管理员在后台点选的赛事（importTarget），其次才是进行中的赛事、
+    // 最后回退到已结束的赛事；不能简单按 id 倒序 —— 更晚创建的已结束赛事
+    // id 更大，会把战绩导入到错误的赛事里。
+    const match =
+      (await prisma.match.findFirst({
+        where: { importTarget: true, status: { in: ["LIVE", "FINISHED"] } },
+        orderBy: { id: "desc" },
+      })) ??
+      (await prisma.match.findFirst({
+        where: { status: "LIVE" },
+        orderBy: { id: "desc" },
+      })) ??
+      (await prisma.match.findFirst({
+        where: { status: "FINISHED" },
+        orderBy: { id: "desc" },
+      }));
     const totalRounds = match ? await totalRoundsForMatch(match.id) : 0;
 
     const signups = match

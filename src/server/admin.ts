@@ -110,6 +110,16 @@ export async function setMatchFee(matchId: number, useFee: boolean) {
   return { msg: "已更新选费设置", use_fee: updated.useFee };
 }
 
+export async function setMatchImportTarget(matchId: number) {
+  await requireMatch(matchId);
+  // 同一时间只能有一个导入目标：先把旧的清掉，再把新目标点亮。
+  await prisma.$transaction([
+    prisma.match.updateMany({ where: { importTarget: true }, data: { importTarget: false } }),
+    prisma.match.update({ where: { id: matchId }, data: { importTarget: true } }),
+  ]);
+  return { msg: "已设为导入目标" };
+}
+
 export async function setMatchLive(matchId: number, liveUrl: string) {
   await requireMatch(matchId);
   const url = liveUrl.trim();
