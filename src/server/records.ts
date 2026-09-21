@@ -49,6 +49,29 @@ const asDate = (value: unknown) => {
   return new Date();
 };
 
+/** 将后台位置和 Riot/LCU 的位置名归一为本站的五个位置槽。 */
+export function normalizeTeamPosition(value: unknown) {
+  const position = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  const aliases: Record<string, string> = {
+    TOP: "TOP",
+    JUG: "JUG",
+    JUNGLE: "JUG",
+    MID: "MID",
+    MIDDLE: "MID",
+    ADC: "ADC",
+    BOTTOM: "ADC",
+    BOT: "ADC",
+    SUP: "SUP",
+    SUPPORT: "SUP",
+    UTILITY: "SUP",
+  };
+  return aliases[position] ?? "";
+}
+
+const itemLimitFor = (teamPosition: string) => (teamPosition === "ADC" ? 7 : 6);
+
 export function normalizeResult(value: unknown): "win" | "lose" {
   const text = String(value ?? "")
     .trim()
@@ -56,7 +79,7 @@ export function normalizeResult(value: unknown): "win" | "lose" {
   return ["win", "胜利", "胜", "1", "true"].includes(text) ? "win" : "lose";
 }
 
-function normalizeItems(value: unknown) {
+function normalizeItems(value: unknown, teamPosition = "") {
   const raw = Array.isArray(value)
     ? value
     : typeof value === "string"
@@ -66,7 +89,7 @@ function normalizeItems(value: unknown) {
     .map((item) => String(item).trim())
     .filter(Boolean)
     .map((item) => itemIdFromInput(item) || item)
-    .slice(0, 7)
+    .slice(0, itemLimitFor(normalizeTeamPosition(teamPosition)))
     .join(",")
     .slice(0, 200);
 }
@@ -149,6 +172,7 @@ export async function batchAddRecords(matchId: number, rows: unknown[]) {
     }
 
     const roundNo = Math.max(1, asInt(row.round_no, match?.currentRound ?? 1));
+    const teamPosition = normalizeTeamPosition(row.team_pos);
     await prisma.matchGameRecord.create({
       data: {
         userId,
@@ -165,7 +189,8 @@ export async function batchAddRecords(matchId: number, rows: unknown[]) {
         cs: asInt(row.cs),
         gold: asInt(row.gold),
         vision: asInt(row.vision),
-        items: normalizeItems(row.items),
+        items: normalizeItems(row.items, teamPosition),
+        teamPosition,
         gameNo,
         roundNo,
         playedAt: asDate(row.played_at),
@@ -174,13 +199,11 @@ export async function batchAddRecords(matchId: number, rows: unknown[]) {
 
     // 管理员录入的位置为权威数据，直接覆盖报名记录的位置槽
     if (matchId > 0) {
-      const teamPosition = String(row.team_pos ?? "")
-        .trim()
-        .toUpperCase();
-      if (["TOP", "JUG", "MID", "ADC", "SUP", "无"].includes(teamPosition)) {
+      const inputPosition = String(row.team_pos ?? "").trim();
+      if (inputPosition && (teamPosition || inputPosition === "无")) {
         await prisma.matchSignup.updateMany({
           where: { matchId, userId },
-          data: { teamPosition: teamPosition === "无" ? "" : teamPosition },
+          data: { teamPosition },
         });
       }
     }
@@ -207,6 +230,7 @@ export type ImportedRow = {
   isMvp: boolean;
   isSvp: boolean;
   teamRank: number;
+  teamPosition: string;
 };
 
 /** 把 agent 传来的原始行规范化成入库结构；英雄/胜负不完整时返回 null。 */
@@ -231,7 +255,20 @@ export function normalizeImportedRow(raw: unknown): ImportedRow | null {
     gold: asInt(row.gold),
     vision: asInt(row.vision),
     level: asInt(row.level),
-    items: normalizeItems(row.items),
+    teamPosition: normalizeTeamPosition(
+      row.team_pos ?? row.teamPosition ?? row.team_position ?? row.individualPosition ?? row.role,
+    ),
+    items: normalizeItems(
+      row.items,
+      String(
+        row.team_pos ??
+          row.teamPosition ??
+          row.team_position ??
+          row.individualPosition ??
+          row.role ??
+          "",
+      ),
+    ),
     isMvp: Boolean(row.is_mvp ?? row.isMvp),
     isSvp: Boolean(row.is_svp ?? row.isSvp),
     teamRank: asInt(row.team_rank ?? row.teamRank),
@@ -322,7 +359,8 @@ export async function upsertGameRecords(input: {
           cs: row.cs,
           gold: row.gold,
           vision: row.vision,
-          items: row.items,
+          items: normalizeItems(row.items, row.teamPosition),
+          teamPosition: row.teamPosition,
           playedAt: input.playedAt,
         };
 
@@ -374,6 +412,7 @@ export async function listMatchRecords(matchId: number) {
     gold: record.gold,
     vision: record.vision,
     items: record.items ? record.items.split(",").filter(Boolean) : [],
+    team_pos: record.teamPosition,
     is_mvp: record.isMvp,
     is_svp: record.isSvp,
     game_no: record.gameNo,
@@ -407,7 +446,12 @@ export async function updateRecord(recordId: number, body: Record<string, unknow
   }
   data.isMvp = Boolean(body.is_mvp);
   data.isSvp = Boolean(body.is_svp);
-  if (body.items !== undefined) data.items = normalizeItems(body.items);
+  if (body.team_pos !== undefined || body.teamPosition !== undefined) {
+    data.teamPosition = normalizeTeamPosition(body.team_pos ?? body.teamPosition);
+  }
+  if (body.items !== undefined) {
+    data.items = normalizeItems(body.items, data.teamPosition ?? record.teamPosition);
+  }
 
   await prisma.matchGameRecord.update({ where: { id: recordId }, data });
   return { kind: "ok" as const };
@@ -864,6 +908,7 @@ export async function profileOverview(userId: number, includeCoreAdmin = false) 
       vision: record.vision,
       gold: record.gold,
       items: record.items ? record.items.split(",").filter(Boolean) : [],
+      team_pos: record.teamPosition,
       is_mvp: record.isMvp,
       is_svp: record.isSvp,
       participation: (() => {

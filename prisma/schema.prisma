@@ -191,6 +191,8 @@ model MatchGameRecord {
   gold         Int       @default(0)
   vision       Int       @default(0)
   items        String    @default("")
+  /// 该局实际分配的位置；与报名位置分开保存，避免后续换位改写历史战绩。
+  teamPosition String    @default("")
   gameNo       Int       @default(1)
   roundNo      Int       @default(1)
   playedAt     DateTime?

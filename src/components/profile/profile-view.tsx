@@ -86,6 +86,7 @@ type HistoryRow = {
   vision: number;
   gold: number;
   items: string[];
+  team_pos: string;
   is_mvp: boolean;
   is_svp: boolean;
   participation: number;
@@ -445,9 +446,9 @@ export function ProfileView() {
       title: "装备",
       dataIndex: "items",
       width: 200,
-      render: (items: string[]) => (
+      render: (items: string[], row: HistoryRow) => (
         <div className="prof-items">
-          {Array.from({ length: 7 }, (_, index) => {
+          {Array.from({ length: row.team_pos === "ADC" ? 7 : 6 }, (_, index) => {
             const icon = itemIcon(items[index] ?? "");
             return icon ? (
               <img key={index} src={icon} alt="装备" />

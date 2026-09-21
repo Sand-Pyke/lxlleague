@@ -175,13 +175,13 @@ export async function importRecords(request: NextRequest) {
     const playedAt = body.playedAt ? new Date(String(body.playedAt)) : new Date();
     if (Number.isNaN(playedAt.getTime())) throw new ApiError(400, "对局时间无效");
 
-    const signedUserIds = new Set(
-      (
-        await prisma.matchSignup.findMany({
-          where: { matchId },
-          select: { userId: true },
-        })
-      ).map((signup) => signup.userId),
+    const signedUsers = await prisma.matchSignup.findMany({
+      where: { matchId },
+      select: { userId: true, teamPosition: true },
+    });
+    const signedUserIds = new Set(signedUsers.map((signup) => signup.userId));
+    const signupPositionByUser = new Map(
+      signedUsers.map((signup) => [signup.userId, signup.teamPosition]),
     );
     if (!signedUserIds.size) throw new ApiError(409, "该赛事没有报名选手，拒绝自动导入");
 
@@ -245,7 +245,17 @@ export async function importRecords(request: NextRequest) {
 
       // 配对成功后顺手把 puuid 记到资料上：第一次靠召唤师名对上，之后改名也不怕。
       // 只在资料里还没有 puuid 时写入，不覆盖已有的，避免脏数据把老映射顶掉。
-      const normalized = normalizeImportedRow({ ...source, user_id: userId });
+      const normalized = normalizeImportedRow({
+        ...source,
+        user_id: userId,
+        team_pos:
+          source.team_pos ??
+          source.teamPosition ??
+          source.team_position ??
+          source.individualPosition ??
+          source.role ??
+          signupPositionByUser.get(userId),
+      });
       if (!normalized) {
         errors.push(`第${line}行：英雄或胜负缺失`);
         continue;

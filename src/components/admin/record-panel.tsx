@@ -65,6 +65,7 @@ type RecordRow = {
   game_no: number;
   round_no: number;
   played_at: string;
+  team_pos: string;
 };
 
 type RowDraft = {
@@ -106,31 +107,30 @@ const newRow = (): RowDraft => ({
 });
 
 const maxGameNo = 5;
-// 六个装备栏加一个饰品栏；自动采集的 item0~item6 不能截掉最后一格。
-const itemSlots = 7;
+const itemSlots = (teamPosition?: string) => (teamPosition === "ADC" ? 7 : 6);
 
-/** 把「装备名称或 id、中英文逗号分隔」的文本统一成入库用的 id 串（旧项目同样以 id 存库）。 */
-const toItemIds = (value: string) =>
+/** 把「装备名称或 id、中英文逗号分隔」的文本统一成入库用的 id 串。 */
+const toItemIds = (value: string, teamPosition?: string) =>
   value
     .replace(/，/g, ",")
     .split(",")
     .map((part) => part.trim())
     .filter(Boolean)
     .map((part) => itemIdFromInput(part) || part)
-    .slice(0, itemSlots)
+    .slice(0, itemSlots(teamPosition))
     .join(",");
 
-const itemSlotValues = (value: string) => {
+const itemSlotValues = (value: string, teamPosition?: string) => {
   const parts = value
     .replace(/，/g, ",")
     .split(",")
     .map((part) => part.trim());
-  return Array.from({ length: itemSlots }, (_, index) => parts[index] ?? "");
+  return Array.from({ length: itemSlots(teamPosition) }, (_, index) => parts[index] ?? "");
 };
 
-/** 装备图标串：最多 7 格，没有图标文件的装备显示占位方块。 */
-function ItemIcons({ items }: { items: string[] }) {
-  const list = items.filter(Boolean).slice(0, itemSlots);
+/** 仅 ADC 显示第七格；没有图标文件的装备显示占位方块。 */
+function ItemIcons({ items, teamPos }: { items: string[]; teamPos?: string }) {
+  const list = items.filter(Boolean).slice(0, itemSlots(teamPos));
   if (!list.length) return <Typography.Text type="secondary">-</Typography.Text>;
   return (
     <Space size={4} wrap>
@@ -359,7 +359,7 @@ export function RecordPanel({
         cs: row.cs,
         gold: row.gold,
         vision: row.vision,
-        items: toItemIds(row.items),
+        items: toItemIds(row.items, row.teamPos),
         team_pos: row.teamPos,
         game_no: gameNo,
         round_no: roundNo,
@@ -627,7 +627,7 @@ export function RecordPanel({
       title: "装备",
       key: "items",
       width: 220,
-      render: (_, row) => <ItemIcons items={row.items} />,
+      render: (_, row) => <ItemIcons items={row.items} teamPos={row.team_pos} />,
     },
     { title: "日期", dataIndex: "played_at", key: "played_at", width: 110 },
     {
@@ -655,6 +655,7 @@ export function RecordPanel({
                 gold: row.gold,
                 vision: row.vision,
                 teamRank: row.team_rank,
+                teamPos: row.team_pos || undefined,
                 items: row.items.map((item) => itemAsset(item)?.name ?? item).join(","),
               });
             }}
@@ -984,7 +985,8 @@ export function RecordPanel({
                 vision: value.vision,
                 is_mvp: value.isMvp,
                 is_svp: value.isSvp,
-                items: toItemIds(value.items),
+                team_pos: value.teamPos,
+                items: toItemIds(value.items, value.teamPos),
               }),
             "战绩已更新",
           ).then((succeeded) => {
@@ -1024,6 +1026,17 @@ export function RecordPanel({
                   { value: "lose", label: "负" },
                 ]}
                 onChange={(result) => setEditDraft({ ...editDraft, result })}
+              />
+              <Select
+                allowClear
+                style={{ width: 100 }}
+                placeholder="位置"
+                value={editDraft.teamPos}
+                options={POSITION_OPTIONS.map((position) => ({
+                  value: position,
+                  label: positionText(position),
+                }))}
+                onChange={(teamPos) => setEditDraft({ ...editDraft, teamPos })}
               />
               <Checkbox
                 checked={editDraft.isMvp}
@@ -1084,10 +1097,10 @@ export function RecordPanel({
             </Space>
             <Space orientation="vertical" size={6} style={{ width: "100%" }}>
               <Typography.Text type="secondary">
-                装备（最多 7 件，含饰品栏；可填名称或 id）
+                装备（{itemSlots(editDraft.teamPos)} 件；可填名称或 id）
               </Typography.Text>
               <Space wrap size={6}>
-                {itemSlotValues(editDraft.items).map((slot, index) => (
+                {itemSlotValues(editDraft.items, editDraft.teamPos).map((slot, index) => (
                   <Space orientation="vertical" size={2} key={`slot-${index}`} align="center">
                     <Input
                       style={{ width: 130 }}
@@ -1095,7 +1108,7 @@ export function RecordPanel({
                       placeholder={`装备 ${index + 1}`}
                       value={slot}
                       onChange={(event) => {
-                        const next = itemSlotValues(editDraft.items);
+                        const next = itemSlotValues(editDraft.items, editDraft.teamPos);
                         next[index] = event.target.value;
                         setEditDraft({
                           ...editDraft,

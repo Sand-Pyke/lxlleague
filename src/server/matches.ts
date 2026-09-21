@@ -529,7 +529,7 @@ export async function getMatchResultData(id: string | number, options: MatchResu
               is_mvp: record.isMvp,
               is_svp: record.isSvp,
               team_rank: record.teamRank,
-              team_pos: slot?.teamPosition || "无",
+              team_pos: record.teamPosition || slot?.teamPosition || "无",
               team_name: teamId ? (teamNames.get(teamId) ?? "") : "",
               level: record.level,
               cs: record.cs,
