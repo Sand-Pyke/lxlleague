@@ -1,0 +1,4275 @@
+:root {
+  --bg: #070b14;
+  --card: rgba(17, 24, 39, 0.78);
+  --line: rgba(148, 163, 184, 0.16);
+  --muted: #94a3b8;
+  --gold: #c8aa6e;
+  --violet: #8b5cf6;
+  /* 中英混排字体栈：拉丁字形先取 Segoe UI，中文依次回退到更细腻的黑体。
+     不引入网络字体，离线部署同样生效。 */
+  --font-sans:
+    "Segoe UI", "Noto Sans SC", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI",
+    "Microsoft YaHei", "DengXian", system-ui, sans-serif;
+  /* 标题统一字重与字距，取值理由见文件末尾「统一标题排版」一节。 */
+  --font-weight-heading: 500;
+  --heading-tracking: 0.02em;
+}
+* {
+  box-sizing: border-box;
+}
+html {
+  min-height: 100%;
+  /* 必须与页面底色一致：scrollbar-gutter 预留的空槽位会露出根元素背景，
+     若沿用深色会在浅色主题右侧形成一条竖带。 */
+  background: var(--league-page-bg);
+  /* 常驻预留滚动条槽位。切换 tab 时内容高度变化会让滚动条出现/消失，
+     页面可用宽度随之在 975 ↔ 960 间跳变，导致内容横向抖动。 */
+  scrollbar-gutter: stable;
+}
+
+/* 不支持 scrollbar-gutter 的浏览器退回「滚动条常显」，同样能固定可用宽度。 */
+@supports not (scrollbar-gutter: stable) {
+  html {
+    overflow-y: scroll;
+  }
+}
+
+/* 弹窗（Modal / Drawer）打开时 rc-util 的滚动锁会往 <head> 动态注入：
+     html body { overflow-y: hidden; width: calc(100% - 15px); }
+   那是「没有 scrollbar-gutter 时用宽度补偿滚动条」的老做法。本项目已经用上面的
+   scrollbar-gutter: stable 常驻预留了槽位，再减一次 15px 会让 body 从 960 缩到 945，
+   于是弹窗一开整个页面横向抖一下（实测 .shell.content 从 928 变 913）。
+   这里只废掉宽度补偿，保留 overflow-y: hidden —— 滚动锁本身照常工作。
+   ⚠️ 必须带 !important：rc-util 的选择器是 `html body`（0,0,2），
+   写普通的 `body { width: ... }`（0,0,1）压不住，实测无效。 */
+html body {
+  width: auto !important;
+}
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    linear-gradient(rgba(7, 11, 20, 0.9), rgba(7, 11, 20, 0.94)),
+    url("/assets/bg-main.jpg") center top/cover fixed;
+  color: #e2e8f0;
+  font-family: var(--font-sans);
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+.page-wrap:before {
+  content: "";
+  inset: 0;
+  position: fixed;
+  pointer-events: none;
+  background:
+    radial-gradient(700px 400px at 90% 0, rgba(139, 92, 246, 0.18), transparent 70%),
+    radial-gradient(650px 480px at 0 100%, rgba(56, 189, 248, 0.1), transparent 70%);
+}
+.shell {
+  width: min(1180px, calc(100% - 32px));
+  margin: auto;
+}
+.nav {
+  height: 74px;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(7, 11, 20, 0.77);
+  backdrop-filter: blur(16px);
+}
+.brand {
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  background: linear-gradient(110deg, #fff 8%, var(--gold) 48%, #a78bfa);
+  background-clip: text;
+  color: transparent;
+  white-space: nowrap;
+}
+.nav nav {
+  display: flex;
+  gap: 26px;
+  flex: 1;
+}
+.nav nav a {
+  font-size: 14px;
+  color: #94a3b8;
+  padding: 28px 0 23px;
+  position: relative;
+}
+.nav nav a:hover,
+.nav nav a.active {
+  color: #fff;
+}
+.nav nav a.active:after {
+  content: "";
+  height: 3px;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-radius: 9px;
+  background: linear-gradient(90deg, #8b5cf6, #6366f1);
+  box-shadow: 0 0 12px #8b5cf6;
+}
+.account {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.online-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 10px #34d399;
+}
+.login-link,
+.admin-link {
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: rgba(139, 92, 246, 0.2);
+  color: #ddd6fe;
+}
+.admin-link {
+  background: #6d28d9;
+}
+.content {
+  padding: 34px 0 64px;
+}
+.hero {
+  padding: 57px 48px 39px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  overflow: hidden;
+  position: relative;
+  background:
+    radial-gradient(550px 280px at 100% 0, rgba(139, 92, 246, 0.3), transparent 65%),
+    linear-gradient(145deg, rgba(30, 41, 59, 0.82), rgba(10, 15, 27, 0.84));
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+}
+.hero:after {
+  content: "";
+  position: absolute;
+  width: 270px;
+  height: 270px;
+  border: 1px solid rgba(200, 170, 110, 0.2);
+  border-radius: 50%;
+  right: -60px;
+  bottom: -130px;
+}
+.eyebrow,
+.panel > p,
+.result-hero > p,
+.profile-hero p {
+  margin: 0;
+  color: #a78bfa;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+.hero h1 {
+  font-size: 48px;
+  line-height: 1.08;
+  margin: 11px 0;
+  background: linear-gradient(110deg, #fff, #c8aa6e 55%, #a78bfa);
+  background-clip: text;
+  color: transparent;
+  letter-spacing: 3px;
+}
+.hero > p {
+  color: var(--muted);
+  margin: 0 0 26px;
+}
+.hero-actions {
+  display: flex;
+  gap: 12px;
+}
+.button {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 11px 18px;
+  font-weight: 700;
+  font-size: 14px;
+  background: transparent;
+  color: white;
+  cursor: pointer;
+}
+.button.primary,
+.card-cta {
+  background: linear-gradient(135deg, #8b5cf6, #4f46e5);
+  box-shadow: 0 6px 18px rgba(79, 70, 229, 0.28);
+}
+.button.ghost:hover {
+  border-color: #a78bfa;
+  background: rgba(139, 92, 246, 0.13);
+}
+.hero-stats {
+  display: flex;
+  gap: 40px;
+  margin-top: 46px;
+}
+.hero-stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.hero-stats b {
+  font-size: 21px;
+  color: #f8fafc;
+}
+.hero-stats span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin: 38px 0 15px;
+}
+.section-heading p {
+  font-size: 10px;
+  letter-spacing: 1.7px;
+  color: #a78bfa;
+  font-weight: 700;
+  margin: 0;
+}
+.section-heading h2 {
+  margin: 4px 0 0;
+  font-size: 22px;
+}
+.section-heading > a,
+.text-link {
+  font-size: 13px;
+  color: #c4b5fd;
+}
+.compact {
+  margin: 0 0 18px;
+}
+.match-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.match-card,
+.panel {
+  border: 1px solid var(--line);
+  background: linear-gradient(145deg, rgba(30, 41, 59, 0.74), rgba(15, 23, 42, 0.76));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  border-radius: 15px;
+}
+.match-card {
+  /* 栅格会把同一行的卡片拉成等高（首页只有一场赛事时会跟 MVP 榜单并排）。
+     用 flex 列排版，好让 .card-cta 用 margin-top: auto 吃掉多出来的高度。
+     改用 flex 后外边距不再合并，但这里的间距原本就不依赖合并，视觉不变。 */
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+  /* 只过渡悬停真正用到的属性。原先的 transition: all 会把滚动条切换引起的
+     卡片宽度变化也做成 200ms 滑动，把瞬间跳变放大成肉眼可见的抖动。 */
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.match-card:hover {
+  border-color: rgba(167, 139, 250, 0.55);
+  transform: translateY(-3px);
+}
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.card-top time {
+  margin-left: auto;
+}
+.status,
+.bo {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 20px;
+}
+.status.live {
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.13);
+}
+.status.created {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.14);
+}
+.status.finished {
+  color: #cbd5e1;
+  background: rgba(148, 163, 184, 0.14);
+}
+.bo {
+  border: 1px solid #475569;
+}
+.match-card h3 {
+  font-size: 17px;
+  margin: 17px 0 11px;
+}
+.match-meta {
+  display: flex;
+  gap: 19px;
+  margin-bottom: 17px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.card-cta {
+  display: block;
+  /* margin-top: auto 把 CTA 钉在卡片底部。卡片被拉伸时（内容比邻居矮）
+     多出来的空间全部落在 CTA 上方，不会让内容全挤在顶部、下面留一大片空白。
+     不拉伸时 auto 归零，间距由 .match-meta 的 margin-bottom 保证，与原来一致。 */
+  margin-top: auto;
+  text-align: center;
+  border-radius: 8px;
+  padding: 9px;
+  font-size: 13px;
+  /* 必须显式给白色。本元素原先没有 color，会继承外层 <a class="match-card"> 的颜色；
+     而链接一旦被访问过，浏览器会套用默认的已访问链接色（紫），
+     紫字落在自己的紫色渐变底上几乎看不见。同渐变的 .button.primary 靠 .button 拿到
+     color: white，.card-cta 不是 .button，所以必须自己写。 */
+  color: #fff;
+}
+.card-cta b {
+  float: right;
+}
+
+/* ---------- 首页四宫格（今日赛事 / MVP 榜单 / 选手排行 / 最近赛果） ---------- */
+
+/* 四张卡片等宽等高：两列等分；grid-auto-rows: 1fr 让四行取同一高度
+   （等于内容最高的那一行），于是四块尺寸完全一致。 */
+.home-board {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+/* 卡片撑满格子，内部再改成 flex 列，内容才能贴到底部。 */
+.home-panel.ant-card {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+}
+
+.home-panel > .ant-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* 「今日赛事」卡内的跳转区：整块可点。
+   外层已经是统一的 Card，这里不能再套 .match-card，否则会双层边框。 */
+.match-spotlight {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* 「今日赛事」最多两场：左右各一半并排展示（只有一场时自动占满整行）。 */
+.match-duo {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 面板标题右侧的补充说明文字（如「按 MVP 次数排序」）。 */
+.panel-hint {
+  font-size: 12px;
+  color: var(--league-muted);
+}
+
+/* 「最近赛果」卡内的结果列表：一行一场，左赛事名/轮次，右比分。 */
+.recent-results {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  gap: 4px;
+}
+.recent-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+.recent-result:last-child {
+  border-bottom: 0;
+}
+.recent-result-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.recent-result-name b {
+  font-size: 13px;
+  color: var(--league-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recent-result-name small {
+  font-size: 12px;
+  color: var(--league-muted);
+}
+.recent-result-score {
+  font-size: 13px;
+  color: var(--league-text);
+  white-space: nowrap;
+}
+
+/* 单列堆叠时取消强制等高，否则每张卡片都会被拉到最高那张的高度。 */
+@media (max-width: 760px) {
+  .home-board {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: auto;
+  }
+  .match-duo {
+    flex-direction: column;
+  }
+}
+.home-grid,
+.profile-grid,
+.detail-grid,
+.admin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(260px, 0.9fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+/* 队伍卡片拖拽排序：拖动中的卡片半透明提示，卡片可抓取。 */
+.admin-grid .ant-card[draggable="true"] {
+  cursor: grab;
+}
+.admin-grid .team-dragging {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+.panel {
+  padding: 22px;
+}
+.rank-line {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+.rank-line:last-child {
+  border: 0;
+}
+.rank-line img,
+.rank-row img,
+.result-row img,
+.roster img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #334155;
+}
+.rank-line div {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.rank-line small,
+.rank-row small,
+.history-row small,
+.admin-row small {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.rank-line > span {
+  font-size: 12px;
+  color: #c4b5fd;
+}
+
+/* MVP 榜单里的次数：用金色跟 .rank-line 默认的紫色区分开。
+   选择器写两个类，否则会被上面的 `.rank-line > span`（1 个类 + 1 个元素）盖掉。 */
+.rank-line .mvp-count {
+  flex: none;
+  font-size: 12px;
+  color: #fcd34d;
+}
+
+:root[data-theme="light"] .rank-line .mvp-count {
+  color: #a16207;
+}
+.rank-number {
+  width: 18px;
+  text-align: center;
+  color: #94a3b8;
+}
+.rank-1 {
+  color: #facc15;
+}
+.rank-2 {
+  color: #cbd5e1;
+}
+.rank-3 {
+  color: #d97706;
+}
+.scoreboard h2 {
+  font-size: 18px;
+  margin: 7px 0 24px;
+}
+.result-hero > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.result-hero i {
+  font-style: normal;
+  color: #8b5cf6;
+}
+.result-note {
+  margin: 18px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.tabs button,
+.game-tabs button,
+.game-tabs a {
+  border: 1px solid #334155;
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 7px;
+  padding: 8px 14px;
+  color: #cbd5e1;
+  cursor: pointer;
+}
+.tabs button.selected,
+.game-tabs button.selected,
+.game-tabs a.selected {
+  border-color: #8b5cf6;
+  color: #fff;
+  background: #6d28d9;
+}
+.empty {
+  text-align: center;
+  padding: 80px;
+  color: var(--muted);
+}
+.player-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 15px;
+}
+.player-card {
+  position: relative;
+  overflow: hidden;
+  padding: 18px;
+  text-align: center;
+  border-radius: 14px;
+  background: linear-gradient(155deg, rgba(30, 41, 59, 0.88), rgba(15, 23, 42, 0.85));
+  border: 1px solid var(--line);
+}
+.player-cover {
+  height: 50px;
+  margin: -18px -18px 0;
+  background: linear-gradient(120deg, #312e81, #0e7490);
+  opacity: 0.72;
+}
+.player-card > img {
+  width: 68px;
+  height: 68px;
+  border: 3px solid #1e293b;
+  object-fit: cover;
+  background: #475569;
+  border-radius: 50%;
+  margin-top: -34px;
+  position: relative;
+}
+.role {
+  position: absolute;
+  top: 13px;
+  right: 10px;
+  color: #ddd6fe;
+  font-size: 11px;
+}
+.player-card h2 {
+  font-size: 17px;
+  margin: 9px 0 2px;
+}
+.game-name,
+.bio {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.bio {
+  height: 34px;
+  padding-top: 9px;
+}
+.player-numbers {
+  display: flex;
+  justify-content: space-between;
+  margin: 16px 0;
+}
+.player-numbers div {
+  display: flex;
+  flex-direction: column;
+}
+.player-numbers b {
+  font-size: 16px;
+}
+.player-numbers span {
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 3px;
+}
+.tier {
+  font-size: 11px;
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.1);
+  padding: 4px 8px;
+  border-radius: 12px;
+}
+.podium {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 17px;
+  margin: 34px 0;
+}
+.podium-card {
+  width: 220px;
+  min-height: 232px;
+  text-align: center;
+  padding: 19px;
+  border: 1px solid var(--line);
+  background: linear-gradient(155deg, rgba(30, 41, 59, 0.86), rgba(15, 23, 42, 0.86));
+  border-radius: 15px;
+}
+.podium-card.place-1 {
+  order: 2;
+  min-height: 272px;
+  border-color: rgba(250, 204, 21, 0.55);
+}
+.podium-card.place-2 {
+  order: 1;
+}
+.podium-card.place-3 {
+  order: 3;
+}
+.podium-card em {
+  font-size: 11px;
+  color: #fbbf24;
+  font-style: normal;
+}
+.podium-card img {
+  display: block;
+  width: 68px;
+  height: 68px;
+  object-fit: cover;
+  background: #475569;
+  border-radius: 50%;
+  margin: 15px auto 8px;
+}
+.podium-card h2 {
+  font-size: 18px;
+  margin: 0;
+}
+.podium-card p {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 5px;
+}
+.podium-card > b {
+  font-size: 27px;
+  color: #ddd6fe;
+  display: block;
+  margin-top: 14px;
+}
+.podium-card > span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.rank-table {
+  overflow: hidden;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: rgba(15, 23, 42, 0.78);
+}
+.rank-head,
+.rank-row {
+  display: grid;
+  grid-template-columns: 70px 2fr 1fr 1fr 1fr 0.7fr;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 20px;
+}
+.rank-head {
+  color: #94a3b8;
+  font-size: 11px;
+  background: rgba(30, 41, 59, 0.5);
+}
+.rank-row {
+  border-top: 1px solid rgba(148, 163, 184, 0.09);
+  font-size: 13px;
+}
+.rank-row > div,
+.result-row > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.rank-row > div {
+  display: grid;
+  grid-template-columns: 32px auto;
+}
+.rank-row small {
+  grid-column: 2;
+}
+
+/* ---------- 榜单领奖台（前三名） ---------- */
+
+/* 前三名不再只靠表格里的名次标签区分，而是摆成奥运会式的领奖台：
+   冠军居中抬高、亚季军分列左右，三者的顶部轮廓自然构成三角形。
+   名次配色统一由 --rank-* 派生：同一条色带同时喂给圆环、基座与文字，
+   换主题只需改写这组变量，不用逐条覆盖规则。 */
+.rank-podium {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 18px;
+  margin: 10px 0 30px;
+  padding: 0;
+  list-style: none;
+}
+.rank-podium-slot {
+  --rank-rgb: 203 213 225;
+  --rank-hi: #f8fafc;
+  --rank-mid: #cbd5e1;
+  --rank-deep: #64748b;
+  --rank-text: #e2e8f0;
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  /* 必须显式锁定行：三个槽位靠 grid-column 换位、DOM 顺序仍是 1/2/3，
+     默认的稀疏排布不允许光标回退，会把冠军留在第一行、亚季军挤到第二行。 */
+  grid-row: 1;
+}
+.rank-podium-slot[data-place="1"] {
+  grid-column: 2;
+  --rank-rgb: 250 204 21;
+  --rank-hi: #fff7cc;
+  --rank-mid: #facc15;
+  --rank-deep: #a16207;
+  --rank-text: #facc15;
+}
+.rank-podium-slot[data-place="2"] {
+  grid-column: 1;
+}
+.rank-podium-slot[data-place="3"] {
+  grid-column: 3;
+  --rank-rgb: 251 146 60;
+  --rank-hi: #fed7aa;
+  --rank-mid: #fb923c;
+  --rank-deep: #7c2d12;
+  --rank-text: #fb923c;
+}
+
+/* 冠军身后的柔光，避免抬高后的头像显得悬空。 */
+.rank-podium-slot[data-place="1"]::before {
+  content: "";
+  position: absolute;
+  top: -26px;
+  left: 50%;
+  width: 220px;
+  height: 220px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(var(--rank-rgb) / 0.16), transparent);
+  pointer-events: none;
+}
+
+/* 奖牌圆环：conic-gradient 环形包裹头像，名次越靠前环越粗、光晕越强。 */
+.rank-medal {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  padding: 4px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 205deg,
+    var(--rank-hi),
+    var(--rank-mid) 34%,
+    var(--rank-deep) 62%,
+    var(--rank-hi)
+  );
+  box-shadow:
+    0 0 0 1px rgb(var(--rank-rgb) / 0.35),
+    0 14px 30px rgba(2, 6, 23, 0.42);
+}
+.rank-podium-slot[data-place="1"] .rank-medal {
+  padding: 5px;
+  box-shadow:
+    0 0 0 1px rgb(var(--rank-rgb) / 0.55),
+    0 16px 34px rgba(2, 6, 23, 0.45),
+    0 0 40px rgb(var(--rank-rgb) / 0.28);
+}
+/* 不足三人时的占位圆环。 */
+.rank-medal--empty {
+  width: 62px;
+  height: 62px;
+  padding: 0;
+  background: none;
+  border: 2px dashed var(--league-border);
+  box-shadow: none;
+}
+.rank-podium-slot[data-place="1"] .rank-medal--empty {
+  width: 78px;
+  height: 78px;
+}
+.rank-medal-crown {
+  position: absolute;
+  top: -17px;
+  z-index: 2;
+  font-size: 21px;
+  color: #fde68a;
+  filter: drop-shadow(0 3px 8px rgba(250, 204, 21, 0.55));
+}
+
+/* 头像本体：有头像裁圆显示，没有头像用名字首字兜底（与个人页同一套处理）。 */
+.rank-face {
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: linear-gradient(155deg, #3b4a63, #1c2536);
+  color: #e2e8f0;
+  font-size: 24px;
+  font-weight: 500;
+}
+.rank-face img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.rank-podium-slot[data-place="1"] .rank-face {
+  width: 78px;
+  height: 78px;
+  font-size: 30px;
+}
+
+.rank-podium-name {
+  margin-top: 10px;
+  max-width: 100%;
+  font-size: 16px;
+  /* 占位符是 <b>、真实选手是 <a>，显式定字重才能让两种状态看起来一致。 */
+  font-weight: 500;
+  color: var(--league-text);
+}
+.rank-podium-name:hover {
+  color: var(--rank-text);
+}
+.rank-podium-slot[data-place="1"] .rank-podium-name {
+  font-size: 18px;
+}
+.rank-podium-sub {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--league-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rank-podium-points {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 6px;
+  color: var(--rank-text);
+}
+.rank-podium-points > b {
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.rank-podium-slot[data-place="1"] .rank-podium-points > b {
+  font-size: 28px;
+}
+.rank-podium-points > small {
+  font-size: 11px;
+  color: var(--league-muted);
+}
+
+/* 基座：高度按名次递减，与抬高的头像一起撑出三角形轮廓。 */
+.rank-podium-base {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: min(196px, 100%);
+  margin-top: 12px;
+  padding: 10px 8px;
+  border: 1px solid rgb(var(--rank-rgb) / 0.34);
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  background: linear-gradient(180deg, rgb(var(--rank-rgb) / 0.26), rgb(var(--rank-rgb) / 0.04));
+}
+.rank-podium-slot[data-place="1"] .rank-podium-base {
+  height: 116px;
+}
+.rank-podium-slot[data-place="2"] .rank-podium-base {
+  height: 88px;
+}
+.rank-podium-slot[data-place="3"] .rank-podium-base {
+  height: 68px;
+}
+.rank-podium-base > b {
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--rank-text);
+}
+.rank-podium-base > small {
+  font-size: 11px;
+  color: var(--league-muted);
+  white-space: nowrap;
+}
+
+/* 浅色底上金色/橙色直接当文字用对比度不够，换成同色系的深色调；
+   圆环也整体压深一档，否则亮色环在白色卡片上会糊掉。 */
+:root[data-theme="light"] .rank-podium-slot[data-place="1"] {
+  --rank-hi: #fef3c7;
+  --rank-mid: #d97706;
+  --rank-deep: #92400e;
+  --rank-text: #b45309;
+}
+:root[data-theme="light"] .rank-podium-slot[data-place="2"] {
+  --rank-hi: #f1f5f9;
+  --rank-mid: #94a3b8;
+  --rank-deep: #475569;
+  --rank-text: #475569;
+}
+:root[data-theme="light"] .rank-podium-slot[data-place="3"] {
+  --rank-hi: #ffedd5;
+  --rank-mid: #ea580c;
+  --rank-deep: #7c2d12;
+  --rank-text: #c2410c;
+}
+:root[data-theme="light"] .rank-face {
+  background: linear-gradient(155deg, #e2e8f0, #cbd5e1);
+  color: #334155;
+}
+:root[data-theme="light"] .rank-medal-crown {
+  color: #d97706;
+}
+
+/* 窄屏下三列各只剩约三分之一屏宽，等比缩小并隐藏基座里的战绩行。 */
+@media (max-width: 760px) {
+  .rank-podium {
+    gap: 8px;
+    margin: 6px 0 22px;
+  }
+  .rank-medal {
+    padding: 3px;
+  }
+  .rank-podium-slot[data-place="1"] .rank-medal {
+    padding: 4px;
+  }
+  .rank-face {
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
+  }
+  .rank-podium-slot[data-place="1"] .rank-face {
+    width: 54px;
+    height: 54px;
+    font-size: 22px;
+  }
+  .rank-medal--empty {
+    width: 44px;
+    height: 44px;
+  }
+  .rank-podium-slot[data-place="1"] .rank-medal--empty {
+    width: 54px;
+    height: 54px;
+  }
+  .rank-medal-crown {
+    top: -14px;
+    font-size: 17px;
+  }
+  .rank-podium-name {
+    font-size: 14px;
+  }
+  .rank-podium-slot[data-place="1"] .rank-podium-name {
+    font-size: 15px;
+  }
+  /* 三列各只剩 97px 宽，英文名会与相邻列挤在一起，窄屏直接让位给中文名与积分。 */
+  .rank-podium-sub {
+    display: none;
+  }
+  .rank-podium-points > b {
+    font-size: 19px;
+  }
+  .rank-podium-slot[data-place="1"] .rank-podium-points > b {
+    font-size: 22px;
+  }
+  .rank-podium-base {
+    padding: 8px 4px;
+  }
+  .rank-podium-base > small {
+    display: none;
+  }
+  .rank-podium-slot[data-place="1"] .rank-podium-base {
+    height: 84px;
+  }
+  .rank-podium-slot[data-place="2"] .rank-podium-base {
+    height: 60px;
+  }
+  .rank-podium-slot[data-place="3"] .rank-podium-base {
+    height: 46px;
+  }
+}
+
+.violet {
+  color: #c4b5fd;
+}
+.profile-hero,
+.match-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 30px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: linear-gradient(130deg, rgba(30, 41, 59, 0.84), rgba(15, 23, 42, 0.8));
+}
+.profile-glow {
+  position: absolute;
+  width: 280px;
+  height: 280px;
+  right: -80px;
+  top: -150px;
+  background: #7c3aed;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.28;
+}
+.profile-hero > img {
+  width: 104px;
+  height: 104px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 4px solid #c4b5fd;
+  background: #475569;
+}
+.profile-hero div:nth-child(3) {
+  flex: 1;
+}
+.profile-hero h1 {
+  margin: 4px 0;
+  font-size: 31px;
+  color: #fff;
+}
+.profile-hero span {
+  font-size: 13px;
+  color: #fcd34d;
+}
+.profile-bio {
+  color: #cbd5e1 !important;
+  letter-spacing: 0 !important;
+  font-size: 13px !important;
+  margin-top: 10px !important;
+}
+.profile-hero input {
+  background: #0f172a;
+  color: white;
+  font-size: 24px;
+  border: 1px solid #a78bfa;
+  border-radius: 6px;
+  padding: 5px;
+  width: 250px;
+}
+.profile-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin: 16px 0;
+  gap: 12px;
+}
+.profile-stats > div {
+  background: rgba(30, 41, 59, 0.65);
+  padding: 17px;
+  text-align: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.profile-stats b {
+  font-size: 24px;
+  color: #fff;
+  display: block;
+}
+.profile-stats span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.history-row,
+.admin-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  font-size: 13px;
+}
+.history-row > div,
+.admin-row > div {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.history-row > strong {
+  font-size: 12px;
+}
+.history-row i {
+  font-style: normal;
+  color: #c4b5fd;
+}
+.win {
+  color: #86efac;
+  font-size: 11px;
+}
+.pending {
+  color: #fcd34d;
+  font-size: 11px;
+}
+.profile-side h2 {
+  margin: 7px 0;
+  font-size: 22px;
+}
+.profile-side > p {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+.profile-side > hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 21px 0;
+}
+.verified {
+  display: block;
+  margin-top: 9px;
+  font-size: 12px;
+  color: #86efac;
+}
+.back {
+  margin-bottom: 17px;
+  font-size: 13px;
+  color: #c4b5fd;
+}
+.match-hero {
+  justify-content: space-between;
+  align-items: center;
+  min-height: 280px;
+  padding: 34px 30px;
+  gap: 24px;
+}
+.match-hero h1 {
+  font-size: 30px;
+  margin: 7px 0;
+  color: #fff;
+}
+.match-hero-meta {
+  color: #c4b5fd;
+  font-size: 12px;
+  margin: 10px 0 0;
+}
+.match-hero-time {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 赛事信息 + 赛程对阵合并后的主模块 */
+.match-hero-schedule {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 顶部：左侧信息 + 右上倒计时 */
+.match-hero-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.match-hero-head-info {
+  min-width: 0;
+}
+
+.match-hero-schedule-title {
+  margin: 18px 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: #a78bfa;
+}
+
+/* 比赛倒计时（赛事详情页 hero 区右侧） */
+.match-hero-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.match-hero .countdown-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: #a78bfa;
+}
+
+.match-countdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.countdown-unit {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+  min-width: 62px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: rgba(139, 92, 246, 0.16);
+  color: #c4b5fd;
+  font-size: 12px;
+}
+
+.countdown-unit b {
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.countdown-note {
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: rgba(139, 92, 246, 0.16);
+  color: #c4b5fd;
+  font-size: 13px;
+}
+
+.details {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 15px;
+  margin: 0;
+}
+.details div {
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  padding: 12px;
+  border-radius: 8px;
+}
+.details dt {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.details dd {
+  margin: 0;
+  font-size: 14px;
+  color: #fff;
+}
+.detail-actions {
+  display: flex;
+  gap: 9px;
+  margin-top: 21px;
+}
+.roster > h2 {
+  margin: 5px 0 13px;
+  font-size: 20px;
+}
+.roster > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+/* 这里只能作用于「头像 + 昵称/位置 + 段位」那一层的昵称块，以及无选手时的空态文案。
+   早先写成 `.roster span` 会命中 .roster 里任意层级的 span，连带把段位标签的
+   <span class="rank-label"> 也改成 flex column —— 图标与段位文字被拆成上下两行。 */
+.roster > div > span,
+.roster > span {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+}
+.roster small {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.roster em {
+  font-size: 10px;
+  color: #fcd34d;
+  font-style: normal;
+}
+/* 报名名单的分路统计（上单/打野/中单/AD/辅助）。必须用 `.roster > .roster-groups`
+   盖过 `.roster > div` 的行样式，否则统计条会被当成一条选手行来排。 */
+.roster > .roster-groups {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  margin: 4px 0 12px;
+  border-bottom: 0;
+}
+.roster-group {
+  flex: none;
+  white-space: nowrap;
+  font: inherit;
+  font-size: 11px;
+  color: var(--muted);
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 999px;
+  padding: 2px 6px;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.roster-group:hover {
+  color: #fff;
+  border-color: rgba(139, 92, 246, 0.6);
+}
+.roster-group--active {
+  color: #fff;
+  background: rgba(139, 92, 246, 0.24);
+  border-color: rgba(139, 92, 246, 0.7);
+}
+/* 报名选手行改成可点击的链接，点击进入该选手的个人主页。 */
+.roster-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  transition: background 0.15s ease;
+}
+.roster-row:hover {
+  background: rgba(148, 163, 184, 0.06);
+}
+.roster-row > span {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+}
+.roster-more {
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  background: rgba(148, 163, 184, 0.06);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+.roster-more:hover {
+  color: #fff;
+  border-color: rgba(139, 92, 246, 0.6);
+}
+.centered {
+  text-align: center;
+}
+.lineup {
+  display: grid;
+  grid-template-columns: 1fr 80px 1fr;
+  align-items: center;
+  gap: 16px;
+}
+.lineup section {
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  border-radius: 14px;
+  padding: 17px;
+}
+.lineup section.red {
+  border-color: rgba(248, 113, 113, 0.38);
+}
+.lineup h2 {
+  margin: 0 0 12px;
+  color: #93c5fd;
+  font-size: 19px;
+}
+.lineup .red h2 {
+  text-align: right;
+  color: #fca5a5;
+}
+.lineup h2 small {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.lineup article {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+.lineup article span {
+  font-size: 11px;
+  color: #93c5fd;
+  width: 42px;
+}
+.lineup article img {
+  width: 38px;
+  height: 38px;
+  object-fit: cover;
+  border-radius: 50%;
+  background: #475569;
+}
+.lineup article b {
+  font-size: 14px;
+  flex: 1;
+}
+.lineup article em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+.lineup .red article {
+  text-align: right;
+}
+.lineup .red article span {
+  color: #fca5a5;
+}
+.vs-orb {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #7c3aed;
+  border: 3px solid #c4b5fd;
+  font-weight: 900;
+  box-shadow: 0 0 30px rgba(139, 92, 246, 0.65);
+}
+.result-hero {
+  text-align: center;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  padding: 30px;
+  background: linear-gradient(145deg, rgba(30, 41, 59, 0.82), rgba(15, 23, 42, 0.8));
+}
+.result-hero h1 {
+  margin: 7px 0 23px;
+  font-size: 28px;
+}
+.result-hero > div {
+  max-width: 550px;
+  margin: auto;
+}
+.result-hero b {
+  font-size: 22px;
+}
+.result-hero strong {
+  font-size: 48px;
+}
+.result-hero > span {
+  display: block;
+  margin-top: 18px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.result-hero .champion {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 16px;
+}
+.result-hero .champion small {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #fbbf24;
+}
+.result-hero .champion b {
+  font-size: 30px;
+  color: #fbbf24;
+}
+.result-hero .fmvp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 14px;
+}
+.result-hero .fmvp small {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #67e8f9;
+}
+.result-hero .fmvp b {
+  font-size: 20px;
+  color: #67e8f9;
+}
+.result-hero .round-state {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.game-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+  padding: 11px;
+}
+.game-tabs a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.game-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.9);
+}
+.result-table h2 {
+  font-size: 20px;
+  margin: 0 0 16px;
+}
+.result-head,
+.result-row {
+  display: grid;
+  grid-template-columns: 2.4fr 0.9fr 1.2fr 0.8fr 0.85fr 0.7fr 0.7fr 1.5fr;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 8px;
+  font-size: 13px;
+}
+.result-head {
+  font-size: 11px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+.result-row {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+.result-row small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.result-portrait {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  flex: none;
+  overflow: hidden;
+  border-radius: 10px;
+  background: rgba(76, 29, 149, 0.75);
+}
+.result-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.result-portrait b {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  font-size: 20px;
+  color: #e9d5ff;
+}
+.result-portrait i {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 2px 5px;
+  border-bottom-right-radius: 8px;
+  background: #7c3aed;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+  color: #fff;
+}
+.result-portrait em {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding: 1px 4px;
+  border-top-left-radius: 6px;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
+  color: #0b1120;
+}
+.result-portrait em.mvp {
+  background: #f59e0b;
+}
+.result-portrait em.svp {
+  background: #38bdf8;
+}
+.result-avatar {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  margin-right: 5px;
+  border-radius: 50%;
+  object-fit: cover;
+  /* 未设置头像时不至于留一个空洞，与其它头像位的灰色占位保持一致。 */
+  background: #475569;
+  vertical-align: -4px;
+}
+.result-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.result-items img {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 6px;
+}
+.result-items .item-missing {
+  width: 28px;
+  height: 28px;
+  border: 1px dashed rgba(148, 163, 184, 0.28);
+  border-radius: 6px;
+  background: rgba(148, 163, 184, 0.08);
+}
+.record-hero {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  object-fit: cover;
+}
+.record-item {
+  display: inline-block;
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 6px;
+  object-fit: cover;
+  vertical-align: middle;
+}
+.record-item-empty {
+  border-style: dashed;
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(148, 163, 184, 0.08);
+}
+.result-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.result-player > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.pair-card {
+  margin-bottom: 16px;
+}
+.pair-head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.pair-head b:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  text-align: right;
+  color: #93c5fd;
+  font-size: 18px;
+}
+.pair-head b:last-child {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  text-align: left;
+  color: #fca5a5;
+  font-size: 18px;
+}
+.pair-team-logo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.pair-team-logo--large {
+  width: 44px;
+  height: 44px;
+}
+.pair-head span {
+  font-size: 20px;
+  font-weight: 800;
+}
+.pair-head .pair-score {
+  font-size: 20px;
+  font-weight: 800;
+  color: #e2e8f0;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.pair-head .pair-score:hover {
+  color: #a78bfa;
+}
+.pair-card.active {
+  border-color: #7c3aed;
+  box-shadow: 0 0 18px rgba(124, 58, 237, 0.35);
+}
+.schedule {
+  margin-top: 16px;
+}
+.schedule-round {
+  margin: 18px 0 6px;
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  color: #a78bfa;
+  font-weight: 700;
+}
+.schedule-round small {
+  margin-left: 8px;
+  color: var(--muted);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.schedule-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  font-size: 13px;
+}
+.schedule-row b:first-child {
+  text-align: right;
+  color: #93c5fd;
+}
+.schedule-row b:last-child {
+  text-align: left;
+  color: #fca5a5;
+}
+.schedule-row .pair-score {
+  font-size: 15px;
+  font-weight: 800;
+  color: #e2e8f0;
+  text-decoration: none;
+  letter-spacing: 0.5px;
+}
+.schedule-row .pair-score:hover {
+  color: #a78bfa;
+}
+.champion-note {
+  margin: 12px 0 4px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #fbbf24;
+  letter-spacing: 0.5px;
+}
+
+/* ---------- 淘汰赛对阵图（bracket） ---------- */
+.bracket-panel {
+  margin-bottom: 16px;
+}
+
+.bracket {
+  display: flex;
+  gap: 18px;
+  padding: 6px 2px 10px;
+  overflow-x: auto;
+}
+
+.bracket-round {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 150px;
+  gap: 8px;
+}
+
+.bracket-round-title {
+  margin: 0 0 2px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #a78bfa;
+}
+
+.bracket-round-matches {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  flex: 1;
+  gap: 10px;
+}
+
+.bracket-match {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.bracket-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  color: #e2e8f0;
+  font-size: 13px;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.bracket-team + .bracket-team {
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+a.bracket-team:hover {
+  background: rgba(124, 58, 237, 0.14);
+}
+
+.bracket-team-logo {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.bracket-team-logo img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+/* 后台队伍编排里「点击建队」按钮中的队徽小图 */
+.team-option-logo {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  border-radius: 3px;
+  /* margin-right: 4px; */
+  vertical-align: middle;
+}
+
+.bracket-team-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bracket-team-score {
+  font-weight: 800;
+  color: #67e8f9;
+}
+
+.bracket-team--winner .bracket-team-name {
+  color: #fbbf24;
+  font-weight: 700;
+}
+
+.bracket-team--loser {
+  opacity: 0.62;
+}
+
+.bracket-team--pending {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.bracket-team--pending .bracket-team-logo {
+  background: rgba(148, 163, 184, 0.24);
+}
+
+.bracket-champion {
+  margin: 14px 0 2px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 800;
+  color: #fbbf24;
+  letter-spacing: 0.5px;
+}
+
+/* 两队在打（决赛）时改用「XX vs XX」：每队各一张卡片，中间用 VS 分隔。 */
+.bracket-final {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 6px 2px;
+}
+
+/* 仅在赛事详情页 hero 里把决赛对阵绝对定位到卡片中央；
+   赛果页 / 阵容页等其它地方仍按正常文档流排列，避免重叠。 */
+.match-hero .bracket-final {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.bracket-final-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: 96px;
+  color: #e2e8f0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.bracket-final-logo {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 16px;
+  color: var(--muted);
+  font-size: 22px;
+  font-weight: 800;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.bracket-final-logo img {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  border-radius: 12px;
+}
+
+.bracket-final-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bracket-final-vs {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.bracket-final-score {
+  font-weight: 800;
+  color: #67e8f9;
+}
+
+.bracket-final-team--winner .bracket-final-name {
+  color: #fbbf24;
+  font-weight: 700;
+}
+
+.bracket-final-team--loser {
+  opacity: 0.62;
+}
+
+.bracket-final-team--pending {
+  color: var(--muted);
+  font-style: italic;
+}
+
+:root[data-theme="light"] .bracket-final-team {
+  color: #172033;
+}
+
+:root[data-theme="light"] .bracket-final-score {
+  color: #0e7490;
+}
+
+:root[data-theme="light"] .bracket-final-team--winner .bracket-final-name {
+  color: #a16207;
+}
+
+:root[data-theme="light"] .bracket-round-title {
+  color: #6d28d9;
+}
+
+:root[data-theme="light"] .bracket-match {
+  background: rgba(255, 255, 255, 0.65);
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
+:root[data-theme="light"] .bracket-team {
+  color: #172033;
+}
+
+:root[data-theme="light"] .bracket-team + .bracket-team {
+  border-top-color: rgba(148, 163, 184, 0.18);
+}
+
+:root[data-theme="light"] a.bracket-team:hover {
+  background: rgba(109, 40, 217, 0.08);
+}
+
+:root[data-theme="light"] .bracket-team-score {
+  color: #0e7490;
+}
+
+:root[data-theme="light"] .bracket-team--winner .bracket-team-name {
+  color: #a16207;
+}
+
+:root[data-theme="light"] .bracket-champion {
+  color: #a16207;
+}
+
+.signup-form {
+  display: flex;
+}
+.signup-hint {
+  display: block;
+}
+.signup-field {
+  margin-top: 14px;
+}
+.signup-label {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+.signup-positions {
+  display: flex;
+  flex-wrap: wrap;
+}
+/* 资料未补全时的报名入口：按钮下方挂一行提示，与按钮左对齐。 */
+.signup-blocked {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.signup-blocked-note {
+  font-size: 12px;
+  color: #fcd34d;
+}
+.admin-grid {
+  grid-template-columns: 1fr 1fr;
+}
+.admin-row span {
+  font-size: 11px;
+  color: #c4b5fd;
+}
+.admin-row button {
+  border: 1px solid #475569;
+  background: #1e293b;
+  color: white;
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-size: 11px;
+  cursor: pointer;
+}
+@media (max-width: 760px) {
+  .shell {
+    width: min(100% - 20px, 1180px);
+  }
+  .nav {
+    height: auto;
+    min-height: 62px;
+    padding: 10px 0;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .brand {
+    font-size: 15px;
+  }
+  .nav nav {
+    order: 3;
+    width: 100%;
+    justify-content: space-between;
+    gap: 0;
+  }
+  .nav nav a {
+    padding: 7px 0;
+    font-size: 12px;
+  }
+  .account {
+    margin-left: auto;
+  }
+  .content {
+    padding-top: 21px;
+  }
+  .hero {
+    padding: 35px 24px;
+  }
+  .hero h1 {
+    font-size: 37px;
+  }
+  .hero-stats {
+    gap: 22px;
+    margin-top: 32px;
+  }
+  .match-grid,
+  .home-grid,
+  .profile-grid,
+  .detail-grid,
+  .admin-grid {
+    grid-template-columns: 1fr;
+  }
+  .player-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .podium {
+    gap: 7px;
+  }
+  .podium-card {
+    width: 32%;
+    padding: 10px;
+  }
+  .podium-card h2 {
+    font-size: 14px;
+  }
+  .podium-card.place-1 {
+    min-height: 240px;
+  }
+  .rank-head,
+  .rank-row {
+    grid-template-columns: 35px 1.6fr 0.8fr 0.8fr;
+    padding: 11px;
+  }
+  .rank-head span:nth-child(4),
+  .rank-head span:nth-child(6),
+  .rank-row > span:nth-child(4),
+  .rank-row > span:nth-child(6) {
+    display: none;
+  }
+  .profile-hero,
+  .match-hero {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .match-hero-schedule {
+    flex-basis: 100%;
+    padding: 16px 0 0;
+    border: 0;
+    border-top: 1px solid rgba(148, 163, 184, 0.16);
+  }
+  .profile-hero > img {
+    width: 77px;
+    height: 77px;
+  }
+  .profile-hero h1 {
+    font-size: 26px;
+  }
+  .profile-hero .button {
+    width: 100%;
+  }
+  .profile-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .lineup {
+    grid-template-columns: 1fr;
+  }
+  .vs-orb {
+    margin: auto;
+  }
+  .lineup section.red {
+    grid-row: 3;
+  }
+  .result-head,
+  .result-row {
+    grid-template-columns: 1.6fr 1.2fr 0.6fr 1.3fr;
+    gap: 6px;
+  }
+  .result-head span:nth-child(2),
+  .result-head span:nth-child(4),
+  .result-head span:nth-child(5),
+  .result-head span:nth-child(7),
+  .result-row > span:nth-child(2),
+  .result-row > span:nth-child(4),
+  .result-row > span:nth-child(5),
+  .result-row > span:nth-child(7) {
+    display: none;
+  }
+  .result-hero strong {
+    font-size: 37px;
+  }
+  .history-row {
+    flex-wrap: wrap;
+  }
+  .history-row > div {
+    min-width: 100%;
+  }
+}
+
+/* Ant Design application frame and dual-color-mode surface. */
+:root[data-theme="light"] {
+  --league-page-bg: #f4f7fb;
+  --league-grid: rgba(79, 70, 229, 0.06);
+  --league-text: #172033;
+  --league-muted: #6d7890;
+  --league-header: rgba(255, 255, 255, 0.86);
+  --league-border: rgba(30, 41, 59, 0.11);
+  --league-shadow: 0 16px 45px rgba(31, 41, 55, 0.09);
+  /* Tab 高亮渐变：浅色底用更深的色阶保证对比度。 */
+  --tab-highlight-gradient: linear-gradient(100deg, #6d28d9 0%, #4f46e5 52%, #b45309 100%);
+  /* 自定义背景上的遮罩：浅色主题用浅色薄纱，避免图片削弱卡片与文字的对比度。 */
+  --user-bg-overlay: linear-gradient(rgba(244, 247, 251, 0.8), rgba(244, 247, 251, 0.9));
+}
+
+:root[data-theme="dark"],
+:root:not([data-theme]) {
+  --league-page-bg: #0b1020;
+  --league-grid: rgba(139, 92, 246, 0.1);
+  --league-text: #eef2ff;
+  --league-muted: #94a3b8;
+  --league-header: rgba(10, 15, 30, 0.86);
+  --league-border: rgba(148, 163, 184, 0.16);
+  --league-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+  /* Tab 高亮渐变：深色底用饱和色相，呼应 .brand 的紫金配色。 */
+  --tab-highlight-gradient: linear-gradient(110deg, #c4b5fd 0%, #c8aa6e 46%, #818cf8 100%);
+  /* 自定义背景上的遮罩：深色主题保留图片氛围，同时压暗以保证文字可读。 */
+  --user-bg-overlay: linear-gradient(rgba(7, 11, 20, 0.72), rgba(7, 11, 20, 0.86));
+}
+
+body {
+  background: var(--league-page-bg) !important;
+  color: var(--league-text);
+  transition:
+    background-color 0.25s ease,
+    color 0.25s ease;
+}
+
+.league-layout {
+  min-height: 100vh;
+  background:
+    linear-gradient(var(--league-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--league-grid) 1px, transparent 1px), var(--league-page-bg) !important;
+  background-size: 32px 32px;
+}
+
+.league-header.ant-layout-header {
+  height: 72px;
+  line-height: normal;
+  padding: 0;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--league-header) !important;
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--league-border);
+}
+
+.league-header__inner {
+  max-width: 1180px;
+  height: 100%;
+  margin: auto;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.league-brand {
+  color: var(--league-text);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  white-space: nowrap;
+}
+
+/* 顶部导航：纯横向滚动的自定义 <nav>，替代 antd Menu 的「…」溢出折叠。
+   移动端条目放不下时直接横向滑动，个人 / 管理后台左滑即可看到。 */
+.league-menu {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+.league-menu::-webkit-scrollbar {
+  display: none;
+}
+
+.league-nav-item {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  color: var(--league-muted);
+  font-size: 14px;
+  white-space: nowrap;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
+}
+.league-nav-item:hover {
+  color: var(--league-text);
+  background: rgba(148, 163, 184, 0.12);
+}
+
+/* 渐变只作用于文字，图标保持 currentColor，避免 SVG 因 color: transparent 消失。
+   选择器必须精确命中文字 span（.league-nav-item__label）：antd 图标也是 <span>，
+   若用 .league-nav-item > span 会把图标的 SVG 一并透明化。 */
+.league-nav-item:hover .league-nav-item__label,
+.league-nav-item--selected .league-nav-item__label {
+  background-image: var(--tab-highlight-gradient);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* 后台 Tabs：同样去掉下划线指示条，仅保留渐变文字高亮。 */
+.ant-tabs .ant-tabs-tab:hover .ant-tabs-tab-btn,
+.ant-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+  background-image: var(--tab-highlight-gradient);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.ant-tabs .ant-tabs-ink-bar {
+  /* 该指示条即 Tabs 的下划线，按需求隐藏；选中态由渐变文字承担。 */
+  display: none !important;
+}
+
+.league-actions {
+  flex: none;
+}
+
+.league-user {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 顶栏账户入口：点击头像区域展开菜单（目前是退出登录）。 */
+.league-user-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.league-user-trigger:hover {
+  background: rgba(148, 163, 184, 0.16);
+}
+
+.league-content {
+  background: transparent;
+}
+
+.league-content .content {
+  min-height: calc(100vh - 72px);
+}
+
+:root[data-theme="light"] .hero,
+:root[data-theme="light"] .profile-hero,
+:root[data-theme="light"] .match-hero,
+:root[data-theme="light"] .result-hero,
+:root[data-theme="light"] .match-card,
+:root[data-theme="light"] .panel,
+:root[data-theme="light"] .player-card,
+:root[data-theme="light"] .podium-card,
+:root[data-theme="light"] .rank-table {
+  background: rgba(255, 255, 255, 0.86) !important;
+  border-color: var(--league-border) !important;
+  box-shadow: var(--league-shadow);
+}
+
+:root[data-theme="light"] .hero h1,
+:root[data-theme="light"] .match-hero h1,
+:root[data-theme="light"] .profile-hero h1,
+:root[data-theme="light"] .result-hero h1,
+:root[data-theme="light"] .panel h2,
+:root[data-theme="light"] .match-card h3,
+:root[data-theme="light"] .player-card h2 {
+  color: #172033;
+}
+
+/* ---------- 浅色主题下赛事中心的可读性 ---------- */
+
+/* 下面这些字面值是照深色底写死的：.button 是白字，.details dd（赛事信息取值）也是白色，
+   而浅色主题里 .panel / .match-hero 是白底（rgba(255,255,255,0.86)），白字压白底只有 1.01:1，
+   等于看不见；#c4b5fd / #a78bfa 用在白底上也只有 1.83:1 与 2.69:1。
+   因此这里把「浅色底上的文字」逐类压深。带渐变色填充的 .button.primary / .card-cta 与选中态
+   .game-tabs a.selected 保留白字，仍由它们自己的基础规则负责，这里不碰。 */
+
+/* 「查看对阵 / 赛果数据 / 取消报名 / 查看当前轮」这类透明底按钮。 */
+:root[data-theme="light"] .button.ghost {
+  color: #172033;
+}
+
+/* 比分与赛事信息取值。 */
+:root[data-theme="light"] .details dd {
+  color: #172033;
+}
+
+/* 「← 返回赛事中心」：锚点用的是 antd 的链接色 #6d5dfc，白底 4.26:1，压深一档更清楚。 */
+:root[data-theme="light"] .back,
+:root[data-theme="light"] .back a {
+  color: #4f46e5;
+}
+
+/* 「查看对阵 →」这类文字链接与赛事副标题（常规赛 · BO3）。 */
+:root[data-theme="light"] .section-heading > a,
+:root[data-theme="light"] .text-link,
+:root[data-theme="light"] .match-hero-meta {
+  color: #6d28d9;
+}
+
+/* 倒计时在浅色主题下同样需要压深，否则白字压白底看不清。 */
+:root[data-theme="light"] .countdown-unit,
+:root[data-theme="light"] .countdown-note {
+  color: #6d28d9;
+  background: rgba(109, 40, 217, 0.08);
+}
+
+:root[data-theme="light"] .countdown-unit b {
+  color: #172033;
+}
+
+:root[data-theme="light"] .match-hero .countdown-title,
+:root[data-theme="light"] .match-hero-schedule-title {
+  color: #6d28d9;
+}
+
+/* 小标题（EVENT INFO / REGISTERED PLAYERS / SCHEDULE / FINAL RESULT）与 .result-note。 */
+:root[data-theme="light"] .eyebrow,
+:root[data-theme="light"] .panel > p,
+:root[data-theme="light"] .result-hero > p,
+:root[data-theme="light"] .section-heading p,
+:root[data-theme="light"] .result-note {
+  color: #6d28d9;
+}
+
+/* 阵容里的「正式 / 替补」小标记：基础色 #fcd34d 在白底上 1.4:1。 */
+:root[data-theme="light"] .roster em {
+  color: #a16207;
+}
+
+/* 资料未补全时的报名提示：基础色 #fcd34d 同样在白底上看不清。 */
+:root[data-theme="light"] .signup-blocked-note {
+  color: #a16207;
+}
+
+/* 赛果页「今日 FMVP」的浅青字在白底上对比不足，压深成青蓝。 */
+:root[data-theme="light"] .result-hero .fmvp small,
+:root[data-theme="light"] .result-hero .fmvp b {
+  color: #0e7490;
+}
+
+/* 次要文字灰 --muted 默认是照深色底写的 #94a3b8，压在白底上只有 2.54:1；浅色主题的
+   --league-muted(#6d7890) 也还是不够（.details dt / .card-top / .match-meta 上的
+   time、.bo、状态标签实测 4.34:1）。这里改成与个人中心浅色主题同一档的 #4a5670
+   （白底 7.35:1、浅紫底 6.26:1）。只覆盖赛事中心用到的卡片容器，深色主题完全不受影响。 */
+:root[data-theme="light"] .match-hero,
+:root[data-theme="light"] .result-hero,
+:root[data-theme="light"] .match-card,
+:root[data-theme="light"] .panel {
+  --muted: #4a5670;
+}
+
+/* 例外：.lineup section 在浅色主题下仍是深色底（基础规则里的 rgba(15, 23, 42, 0.73)），
+   里面的次要文字必须继续用深色主题的灰，否则会变成「深灰压深底」。 */
+:root[data-theme="light"] .lineup section {
+  --muted: #94a3b8;
+}
+
+/* 阵容页头部右上角的「第 1 轮 · 对阵阵容」直接引用 --league-muted，不走 --muted，
+   需要单独压深：浅紫底 #eaecfa 上 3.78:1 → 6.26:1。 */
+:root[data-theme="light"] .lineup-round {
+  color: #4a5670;
+}
+
+/* 轮次/局数切换（GAME 1、第 1 轮）：基础样式是「深灰底 + 浅灰字」的深色小块，浅色主题下
+   文字只有 2.75:1；改成浅底深字，选中态保持原来的紫色高亮。 */
+:root[data-theme="light"] .tabs button:not(.selected),
+:root[data-theme="light"] .game-tabs button:not(.selected),
+:root[data-theme="light"] .game-tabs a:not(.selected) {
+  border-color: var(--league-border);
+  /* 比卡片底色略深一档，白卡片上才看得出是个可点的按钮。 */
+  background: rgba(148, 163, 184, 0.18);
+  color: #33415a;
+}
+
+/* 状态标签「即将开始 / 进行中」用的是 antd 预设色的浅色主题字色（#faad14 / #52c41a），
+   落在 #fffbe6 / #f6ffed 填充上只有 1.83:1，压深到与 .prof-gold / .prof-green 同一档。 */
+:root[data-theme="light"] .ant-tag.ant-tag-warning {
+  color: #a16207 !important;
+}
+
+:root[data-theme="light"] .ant-tag.ant-tag-success {
+  color: #15803d !important;
+}
+
+@media (max-width: 760px) {
+  .league-header.ant-layout-header {
+    height: auto;
+  }
+  .league-header__inner {
+    min-height: 64px;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+  /* 导航独占第二行并横向滚动：不再有「…」折叠，个人 / 管理后台左滑即可看到。 */
+  .league-menu {
+    order: 3;
+    flex-basis: 100%;
+    width: 100%;
+  }
+  .league-nav-item {
+    height: 36px;
+    padding: 0 12px;
+  }
+  .league-actions {
+    margin-left: auto;
+  }
+}
+
+.dashboard-hero.ant-card {
+  overflow: hidden;
+  border: 1px solid var(--league-border);
+  box-shadow: var(--league-shadow);
+  background:
+    radial-gradient(circle at 86% 28%, rgba(109, 93, 252, 0.3), transparent 26rem),
+    linear-gradient(130deg, rgba(109, 93, 252, 0.16), transparent 52%);
+}
+
+.dashboard-kicker {
+  color: #8d7eff;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+}
+
+.dashboard-hero .ant-typography h1,
+.dashboard-hero h1 {
+  margin: 12px 0;
+  font-size: clamp(36px, 5vw, 56px);
+  letter-spacing: 1.5px;
+}
+
+.dashboard-orb {
+  width: min(220px, 46vw);
+  aspect-ratio: 1;
+  margin-inline: auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(139, 126, 255, 0.45);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(139, 126, 255, 0.45),
+    rgba(109, 93, 252, 0.06) 65%,
+    transparent 66%
+  );
+  box-shadow:
+    0 0 72px rgba(109, 93, 252, 0.26),
+    inset 0 0 34px rgba(255, 255, 255, 0.12);
+  color: #d8d2ff;
+  font-size: clamp(58px, 10vw, 106px);
+}
+
+.dashboard-stats {
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top: 1px solid var(--league-border);
+}
+
+.dashboard-stats .ant-statistic {
+  padding: 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--league-page-bg) 30%, transparent);
+}
+
+.dashboard-stats .stat-link {
+  display: block;
+  border-radius: 12px;
+}
+
+.dashboard-stats .stat-link .ant-statistic {
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.dashboard-stats .stat-link:hover .ant-statistic {
+  transform: translateY(-2px);
+  box-shadow: var(--league-shadow);
+}
+
+.antd-panel.ant-card {
+  height: 100%;
+  border-color: var(--league-border);
+  box-shadow: var(--league-shadow);
+}
+
+:root[data-theme="light"] .dashboard-hero.ant-card {
+  background:
+    radial-gradient(circle at 86% 28%, rgba(109, 93, 252, 0.18), transparent 26rem),
+    linear-gradient(130deg, rgba(109, 93, 252, 0.09), rgba(255, 255, 255, 0.88) 52%);
+}
+
+.matches-content,
+.admin-empty-card {
+  margin-top: 16px;
+}
+
+.loading-state {
+  display: grid;
+  min-height: 280px;
+  place-items: center;
+}
+
+.player-antd-card {
+  height: 100%;
+  overflow: hidden;
+}
+
+.table-player {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 180px;
+}
+
+.table-player > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.table-player b,
+.table-player small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-player small {
+  color: var(--league-muted);
+  font-size: 12px;
+}
+
+.profile-empty-card {
+  /* max-width: 620px; */
+  margin: 48px auto;
+  width: 100%;
+}
+
+/* ---------- 选手中心（搜索 / 筛选 / 卡片与列表视图） ---------- */
+
+.players-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.players-search {
+  flex: 1;
+  min-width: 240px;
+  max-width: 460px;
+}
+
+.players-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.players-view {
+  margin-left: auto;
+}
+
+/* 段位下拉一律一次铺满、不出现滚动条（选手筛选 / 注册表单 / 个人中心改段位共用）。
+   antd 6 已经移除 listHeight，且不管有没有虚拟滚动，弹层内层
+   .ant-select-dropdown-list-holder 都带一个内联的 max-height: 256px——
+   十个以上的段位会被截断出滚动条（实测注册表单里「黑铁」直接看不到）。
+   内联样式只能靠样式表里的 !important 覆盖。 */
+.rank-dropdown .ant-select-dropdown-list-holder {
+  max-height: none !important;
+}
+
+/* 「全部段位」没有图标，内容天然比带图标的行矮 4px。
+   不给 .ant-select-item 加 min-height（会被 antd 运行期注入的规则压成 32px，
+   写了也是死代码），改成给内容元素定高，优先级稳定且不依赖加载顺序。 */
+.rank-dropdown .ant-select-item-option-content {
+  display: flex;
+  align-items: center;
+  min-height: 26px;
+}
+
+/* 选中值（选择框里）的段位图标。
+   注意 antd 6 的选择器类名是 .ant-select-content，不再是 .ant-select-selector。 */
+.players-rank-select .ant-select-content .rank-label {
+  --rank-icon-size: 18px;
+}
+
+/* 下拉里的段位选项：图标 + 文字，行高与其它选项一致。 */
+.ant-select-dropdown .rank-label {
+  --rank-icon-size: 20px;
+}
+
+.players-card-link {
+  display: block;
+  height: 100%;
+}
+
+.players-card-link .player-antd-card {
+  height: 100%;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.players-card-link:hover .player-antd-card {
+  transform: translateY(-3px);
+  box-shadow: var(--league-shadow);
+}
+
+.players-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.players-card-head > div {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.players-card-head b {
+  font-size: 15px;
+  color: var(--league-text);
+}
+
+.players-card-head small {
+  font-size: 12px;
+  color: var(--league-muted);
+}
+
+.players-uid {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--league-muted);
+}
+
+.players-tags {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.players-hero-label {
+  font-size: 12px;
+  color: var(--league-muted);
+}
+
+.players-hero-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.players-hero-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.players-hero {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.players-hero img {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  object-fit: cover;
+}
+
+.players-hero-empty {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.players-stats {
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.players-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 0;
+}
+
+.players-stats b {
+  font-size: 14px;
+  color: var(--league-text);
+}
+
+.players-stats small {
+  font-size: 11px;
+  color: var(--league-muted);
+}
+
+.players-recent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.result-dot {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  border-radius: 5px;
+}
+
+.result-dot--win {
+  background: #16a34a;
+}
+
+.result-dot--loss {
+  background: #dc2626;
+}
+
+/* ---------- 个人主页（档案卡 / 赛季数据 / 比赛历史） ---------- */
+
+.prof-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 核心管理员（admin）是运维用的系统账号、并非参赛选手：隐藏段位/位置/排名与
+   常用英雄、荣誉、比赛历史等面板，仅保留档案卡与「个人简介」。
+   其他被授予 isAdmin 的普通选手不受影响（由服务端的 is_core_admin 标记决定）。
+   ⚠️ 「赛季数据」与「我的资料设置」不在这里处理，而是在 JSX 里直接不渲染：
+   赛季数据是 .prof-main 的最后一张卡片，会被后面的
+   `.prof-main > .ant-card:last-child { display: flex }`（特异性 0,3,0）
+   盖掉这条规则（0,2,0）→ 写 display: none 根本不管用。
+   下面这行只是残留的兜底，别再依赖它。 */
+.prof-page--core-admin .prof-meta,
+.prof-page--core-admin .prof-stats-card,
+.prof-page--core-admin .prof-side,
+.prof-page--core-admin .prof-history {
+  display: none;
+}
+
+/* 侧栏整体隐藏后，主列独占整行，避免右侧留出空白。 */
+.prof-page--core-admin .prof-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.prof-hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--league-border);
+  border-radius: 18px;
+  background: linear-gradient(130deg, rgba(30, 41, 59, 0.88), rgba(15, 23, 42, 0.82));
+}
+
+/* 自定义背景铺满**整个站点**（不只是个人主页：个人主页只是修改入口）。
+   用固定定位层而非 background-attachment: fixed：各浏览器表现一致，
+   页面再长也不会把图片拉伸放大，移动端同样按视口取景。 */
+.league-page-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--user-bg-overlay), var(--user-bg-image);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+/* 背景层是 z-index:0 的定位元素，会盖住静态内容，因此把外壳自身底色去掉、
+   再把顶栏与内容区抬到它上方（顶栏本来就 sticky + z-index:30，无需重复处理）。 */
+.league-layout--custom-bg {
+  background: transparent !important;
+}
+
+.league-layout--custom-bg > .league-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* 深色模式下的「玻璃面板」：所有卡片一律透明，让自定义背景透出来。
+   浅色模式保持不透明（浅色遮罩本来就淡，再透明文字会读不清）。 */
+:root[data-theme="dark"] .ant-card {
+  background: transparent;
+}
+
+/* 表格自己带一层 colorBgContainer 底色，若不透明会在透明卡片里形成一块死板的深色板，
+   与玻璃面板割裂；这里一并放开。浮层（Modal/Dropdown/Select/Popover）保持不透明，
+   否则弹窗叠在背景图上会读不清。 */
+:root[data-theme="dark"] .ant-table,
+:root[data-theme="dark"] .ant-table-container,
+:root[data-theme="dark"] .ant-table-thead > tr > th,
+:root[data-theme="dark"] .ant-table-tbody > tr > td {
+  background: transparent;
+}
+
+.prof-hero-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 22px;
+  padding: 30px;
+}
+
+.prof-avatar-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.prof-avatar-actions {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.prof-avatar-actions a {
+  color: #c4b5fd;
+}
+
+/* 浅色模式下背景不可用时的说明文字。 */
+.prof-avatar-note {
+  color: rgba(196, 181, 253, 0.75);
+}
+
+/* 头像本身即上传入口：悬停时轻微上浮，提示可点击更换。 */
+.prof-avatar-trigger {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  transition: transform 0.16s ease;
+}
+
+.prof-avatar-trigger:hover {
+  transform: translateY(-2px);
+}
+
+/* 未设置头像时的占位：虚线圆形 + 相机图标 + 文字提示。 */
+.prof-avatar-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 96px;
+  height: 96px;
+  border: 1px dashed rgba(196, 181, 253, 0.55);
+  border-radius: 50%;
+  background: rgba(139, 92, 246, 0.12);
+  color: #c4b5fd;
+  font-size: 20px;
+}
+
+.prof-avatar-placeholder small {
+  font-size: 11px;
+  line-height: 1.2;
+  opacity: 0.9;
+}
+
+.prof-identity {
+  flex: 1;
+  min-width: 220px;
+}
+
+.prof-identity h1 {
+  margin: 0 0 4px;
+  font-size: 30px;
+  color: #fff;
+}
+
+.prof-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.prof-rank {
+  color: #c4b5fd;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+}
+
+.prof-tag {
+  margin: 0;
+  background: rgba(51, 65, 85, 0.75);
+  color: #e2e8f0;
+  border-color: transparent;
+}
+
+.prof-tag.clickable {
+  cursor: pointer;
+}
+
+.prof-heroes {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.prof-heroes img {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+/* 常用英雄下拉里的候选项：图标 + 称号·英雄名。 */
+.prof-hero-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prof-hero-option img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+
+/* 「报名前需补全资料」提示卡与设置区最后一行留点空隙。 */
+.prof-signup-warning {
+  margin-top: 10px;
+}
+
+.prof-ladder {
+  margin-left: auto;
+  color: var(--league-muted);
+  font-size: 12px;
+}
+
+.prof-ladder b {
+  color: #fcd34d;
+}
+
+.prof-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.9fr);
+  gap: 16px;
+  /* 大屏两列等高：stretch 让 .prof-main / .prof-side 的高度都取两者中的较大值，
+     再配合下面「最后一张卡片撑满」的规则，两侧底边才能真正对齐。 */
+  align-items: stretch;
+}
+
+.prof-main,
+.prof-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* 个人页的卡片高度必须交回内容决定：全局的 .antd-panel.ant-card { height: 100% } 是给
+   首页那种「同一行卡片要等高」的场景用的，在等高栅格里会让列内每张卡片都去抢整列高度，
+   再被 flex-shrink 压成近似等高（实测 308 / 294），反而看不出主次。 */
+.prof-main > .ant-card,
+.prof-side > .ant-card {
+  height: auto;
+}
+
+/* 用各列最后一张卡片吃掉剩余高度：列内前面的卡片保持自然高度，只有末尾那张被拉高，
+   于是两列底边齐平。若该列本身就是较高的一列，就没有剩余空间，flex 增长不会生效。 */
+.prof-main > .ant-card:last-child,
+.prof-side > .ant-card:last-child {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+/* 拉高的卡片内部也要跟着撑开，否则卡片边框延伸下去了、内容却全挤在顶部。 */
+.prof-main > .ant-card:last-child > .ant-card-body,
+.prof-side > .ant-card:last-child > .ant-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+/* 用户社区：参照微博样式，帖子流（新帖在上），每条帖子下方列出评论，默认最多展示 5 条评论。 */
+.community-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 标题旁的发言须知图标：默认弱化，悬停时换成主题强调色并显示提示气泡。 */
+.community-info-icon {
+  font-size: 14px;
+  color: var(--league-muted);
+  cursor: pointer;
+}
+
+.community-info-icon:hover {
+  color: var(--violet);
+}
+
+.community-post {
+  min-width: 0;
+}
+
+.community-post + .community-post {
+  padding-top: 16px;
+  border-top: 1px solid var(--league-border);
+}
+
+.community-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.community-avatar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-size: 15px;
+  color: #fff;
+  background: linear-gradient(135deg, #64748b, #475569);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.community-avatar--post {
+  width: 44px;
+  height: 44px;
+  font-size: 19px;
+  background: linear-gradient(135deg, #c8aa6e, #8b5cf6);
+}
+
+.community-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.community-item-author {
+  display: flex;
+  align-items: center;
+  margin-bottom: 3px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--league-text);
+}
+
+.community-op-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--violet);
+  border-radius: 4px;
+  color: var(--violet);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+}
+
+.community-post-content {
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--league-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.community-comment-content {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--league-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.community-item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.community-item-time {
+  font-size: 12px;
+  color: var(--league-muted);
+}
+
+.community-item-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.community-item-actions .ant-btn {
+  height: 26px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+.community-item-actions .ant-btn:not(.ant-btn-dangerous) {
+  color: var(--league-muted);
+}
+
+.community-item-actions .ant-btn:not(.ant-btn-dangerous):hover {
+  color: var(--violet);
+}
+
+.community-comments {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin-top: 8px;
+  padding: 2px 14px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.38);
+}
+
+.community-comments .community-item {
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.community-comments .community-item + .community-item {
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.community-comments .community-avatar {
+  width: 30px;
+  height: 30px;
+  font-size: 13px;
+}
+
+.community-empty {
+  padding: 10px 0 8px;
+  font-size: 13px;
+  color: var(--league-muted);
+}
+
+.community-more {
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.community-more .ant-btn {
+  font-size: 13px;
+  color: var(--league-muted);
+}
+
+.community-more .ant-btn:hover {
+  color: var(--violet);
+}
+
+/* 浅色主题：评论区底色与分隔线换成浅色（基础规则是照深色底写死的），
+   头像渐变提亮一档、楼主徽章压深保证白底上的对比度。 */
+:root[data-theme="light"] .community-comments {
+  background: rgba(79, 70, 229, 0.05);
+}
+
+:root[data-theme="light"] .community-comments .community-item + .community-item,
+:root[data-theme="light"] .community-more {
+  border-color: rgba(30, 41, 59, 0.1);
+}
+
+:root[data-theme="light"] .community-avatar {
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+}
+
+:root[data-theme="light"] .community-op-badge {
+  border-color: #6d28d9;
+  color: #6d28d9;
+}
+
+@media (max-width: 560px) {
+  .community-feed {
+    gap: 12px;
+  }
+
+  .community-item {
+    gap: 10px;
+  }
+
+  .community-avatar--post {
+    width: 38px;
+    height: 38px;
+    font-size: 16px;
+  }
+
+  .community-comments {
+    margin-right: -2px;
+    margin-left: -2px;
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .community-item-meta {
+    align-items: flex-start;
+  }
+}
+
+/* 视频内容模块：卡片网格，播放器占满卡片宽度，标题/简介/元信息在下方。 */
+.video-gallery-loading {
+  display: grid;
+  min-height: 240px;
+  place-items: center;
+}
+
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 18px;
+}
+
+.video-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--league-border);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.3);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.video-card:hover {
+  border-color: rgba(139, 92, 246, 0.55);
+  box-shadow: var(--league-shadow);
+}
+
+.video-card__cover {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: #000;
+  cursor: pointer;
+}
+
+.video-card__thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.92;
+  transition:
+    transform 0.25s ease,
+    opacity 0.25s ease;
+}
+
+.video-card__cover:hover .video-card__thumb {
+  transform: scale(1.05);
+  opacity: 1;
+}
+
+.video-card__play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 52px;
+  text-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.3), transparent 72%);
+  transition: transform 0.2s ease;
+}
+
+.video-card__cover:hover .video-card__play {
+  transform: scale(1.12);
+}
+
+.video-card__body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+}
+
+.video-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.video-card__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(139, 92, 246, 0.18);
+  color: var(--violet);
+  font-size: 14px;
+}
+
+.video-card__title.ant-typography {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+  color: var(--league-text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.video-card__desc.ant-typography {
+  margin-bottom: 0;
+  color: var(--league-muted);
+  font-size: 13px;
+}
+
+.video-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--league-muted);
+  font-size: 12px;
+}
+
+.video-upload-file.ant-typography {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+/* 播放弹窗：深色容器衬托播放器，原生控件自带全屏/暂停/音量。 */
+.video-player-modal .ant-modal-content {
+  overflow: hidden;
+  padding: 12px;
+  background: #0b1020;
+}
+
+.video-player-modal .ant-modal-header {
+  margin-bottom: 10px;
+  background: transparent;
+}
+
+.video-player-modal__video {
+  display: block;
+  width: 100%;
+  /* 固定播放区域高度：视频无论宽扁还是竖版都按 contain 居中呈现，
+     避免宽扁视频按原始比例把画面压得很矮。 */
+  height: min(70vh, 560px);
+  min-height: 380px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #000;
+}
+
+/* 上传弹窗的拖拽选择区：边框/底色跟随主题。 */
+.video-upload-dragger .ant-upload-drag {
+  border-color: var(--league-border);
+  background: rgba(15, 23, 42, 0.25);
+}
+
+:root[data-theme="light"] .video-upload-dragger .ant-upload-drag {
+  background: rgba(79, 70, 229, 0.04);
+}
+
+/* 浅色主题：视频卡片底色换浅色，其余颜色走主题变量已自适应。 */
+:root[data-theme="light"] .video-card {
+  background: rgba(79, 70, 229, 0.04);
+}
+
+@media (max-width: 640px) {
+  .video-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 赛季数据的 8 块格子平分多出来的高度，表现为「格子变高」而不是「下方留白」。 */
+.prof-main > .ant-card:last-child .prof-stats {
+  flex: 1;
+}
+
+.prof-bio.ant-typography {
+  margin-bottom: 0;
+  color: #cbd5e1;
+}
+
+/* 访客视角隐藏了「我的资料设置」，个人简介卡因此变矮，下面的赛季数据被 flex
+   拉得过长。给访客卡一个与设置区相当的最小高度，让两种视角下的布局高度一致。
+   仅大屏生效：小屏下单列布局没有等高拉伸，加了最小高度只会多出一段空白。 */
+@media (min-width: 1101px) {
+  .prof-bio-card--visitor {
+    min-height: 300px;
+  }
+}
+
+.prof-settings {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.prof-settings-title {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--league-muted);
+  letter-spacing: 0.4px;
+}
+
+.prof-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 0;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.09);
+}
+
+.prof-settings-row b {
+  color: #e2e8f0;
+}
+
+.prof-settings-note {
+  font-size: 12px;
+  color: var(--league-muted);
+}
+
+.prof-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.prof-stat {
+  /* 卡片被拉高时靠 align-content 让「数值 + 标签」在格子里纵向居中。 */
+  display: grid;
+  align-content: center;
+  padding: 16px 10px;
+  text-align: center;
+  border: 1px solid var(--league-border);
+  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.6);
+}
+
+.prof-stat b {
+  display: block;
+  font-size: 23px;
+  color: #fff;
+}
+
+.prof-stat span {
+  font-size: 12px;
+  color: var(--league-muted);
+}
+
+.prof-green {
+  color: #86efac !important;
+}
+
+.prof-red {
+  color: #fca5a5 !important;
+}
+
+.prof-gold {
+  color: #fcd34d !important;
+}
+
+.prof-cyan {
+  color: #67e8f9 !important;
+}
+
+.prof-hero-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.09);
+}
+
+.prof-hero-row:last-child {
+  border-bottom: 0;
+}
+
+.prof-hero-row img,
+.prof-hero-row > b {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 50%;
+  background: #1e293b;
+  object-fit: cover;
+}
+
+.prof-hero-row > div {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.prof-hero-row strong {
+  font-size: 14px;
+  color: #e2e8f0;
+}
+
+.prof-hero-row small,
+.prof-hero-row > span {
+  font-size: 12px;
+  color: var(--league-muted);
+}
+
+.prof-placeholder {
+  padding: 26px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--league-muted);
+}
+
+.prof-honors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.prof-honors .prof-points {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--league-muted);
+}
+
+.prof-history {
+  margin-top: 0;
+}
+
+.prof-history-row {
+  cursor: pointer;
+}
+
+.prof-date {
+  font-size: 12px;
+  color: var(--league-muted);
+}
+
+.prof-muted {
+  color: var(--league-muted);
+}
+
+.prof-champion {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prof-champion img,
+.prof-champion > b {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 50%;
+  background: #1e293b;
+  object-fit: cover;
+}
+
+.prof-champion > span {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  color: #e2e8f0;
+}
+
+.prof-champion small {
+  font-size: 11px;
+  color: var(--league-muted);
+}
+
+.prof-champion em {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  padding: 0 3px;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+  border-radius: 4px;
+}
+
+.prof-champion em.mvp {
+  color: #111827;
+  background: #fcd34d;
+}
+
+.prof-champion em.svp {
+  color: #0f172a;
+  background: #7dd3fc;
+}
+
+.prof-kda {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  color: #e2e8f0;
+}
+
+/* 击杀 / 阵亡 / 助攻要作为整体显示在一行。
+   flex 容器里的连续文本与 <i> 会被拆成多个匿名子项，column 方向上各自换行，
+   所以这一行必须自带包裹元素，不给它被拆成独立子项的机会。 */
+.prof-kda > span {
+  white-space: nowrap;
+}
+
+.prof-kda i {
+  font-style: normal;
+  color: #fca5a5;
+}
+
+.prof-kda small {
+  font-size: 11px;
+  color: var(--league-muted);
+}
+
+.prof-share {
+  color: #86efac;
+  font-size: 13px;
+}
+
+.prof-items {
+  display: flex;
+  gap: 3px;
+}
+
+.prof-items img {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.prof-items-empty {
+  width: 26px;
+  height: 26px;
+  border: 1px dashed rgba(148, 163, 184, 0.3);
+  border-radius: 6px;
+}
+
+.prof-bg-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.prof-bg-grid button {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  font-size: 11px;
+  color: #cbd5e1;
+  cursor: pointer;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid var(--league-border);
+  border-radius: 10px;
+}
+
+.prof-bg-grid button.selected {
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 1px #a78bfa inset;
+}
+
+.prof-bg-grid button > span {
+  display: block;
+  height: 56px;
+  background-position: center;
+  background-size: cover;
+  border-radius: 6px;
+}
+
+/* 表情头像选择网格：6 列圆形预览，与背景网格同一套交互（点选 + 高亮边框）。 */
+.prof-emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+}
+
+.prof-emoji-grid button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px;
+  font-size: 11px;
+  color: #cbd5e1;
+  cursor: pointer;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid var(--league-border);
+  border-radius: 10px;
+}
+
+.prof-emoji-grid button.selected {
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 1px #a78bfa inset;
+}
+
+.prof-emoji-grid button > span {
+  display: block;
+  width: 48px;
+  height: 48px;
+  background-position: center;
+  background-size: cover;
+  border-radius: 50%;
+}
+
+/* 「我的资料设置」里头像一行的缩略图 */
+.prof-settings-avatar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prof-settings-avatar img {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #eef2ff;
+}
+
+@media (max-width: 1100px) {
+  .prof-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .prof-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .prof-bg-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .prof-emoji-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.auth-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 48px 16px;
+  background:
+    radial-gradient(circle at 8% 12%, rgb(109 93 252 / 22%), transparent 31rem),
+    radial-gradient(circle at 90% 88%, rgb(56 189 248 / 16%), transparent 28rem), var(--league-bg);
+}
+
+.auth-card {
+  width: min(100%, 460px);
+  overflow: hidden;
+  border-color: var(--league-border);
+  box-shadow: var(--league-shadow);
+}
+
+.auth-card__content {
+  display: flex;
+  width: 100%;
+}
+
+.captcha-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  width: 100%;
+}
+
+.captcha-row .ant-input {
+  width: 100%;
+}
+
+.captcha-row .ant-btn {
+  white-space: nowrap;
+}
+
+.auth-emblem {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border-radius: 18px;
+  color: #fff;
+  font-size: 26px;
+  background: linear-gradient(135deg, #6d5dfc, #38bdf8);
+  box-shadow: 0 14px 30px rgb(109 93 252 / 28%);
+}
+
+/* 个人主页档案卡在浅色下的配色。
+   基础样式是深色渐变，浅色主题下会渲染成一块黑卡；这里换成浅色渐变，
+   并同步适配卡内文字（标题、段位、占位符、说明文字），与其它浅色卡片观感一致。 */
+:root[data-theme="light"] .prof-hero {
+  background: linear-gradient(130deg, rgba(255, 255, 255, 0.94), rgba(238, 240, 255, 0.9));
+  border-color: var(--league-border);
+  box-shadow: var(--league-shadow);
+}
+
+:root[data-theme="light"] .prof-identity h1 {
+  color: #172033;
+}
+
+:root[data-theme="light"] .prof-ladder b {
+  color: #a16207;
+}
+
+:root[data-theme="light"] .prof-avatar-note {
+  color: #6d28d9;
+}
+
+:root[data-theme="light"] .prof-avatar-placeholder {
+  border-color: rgba(109, 40, 217, 0.45);
+  background: rgba(109, 40, 217, 0.08);
+  color: #6d28d9;
+}
+
+:root[data-theme="light"] .prof-stat,
+:root[data-theme="light"] .prof-bg-grid button,
+:root[data-theme="light"] .prof-emoji-grid button {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: var(--league-border);
+}
+
+:root[data-theme="light"] .prof-stat b,
+:root[data-theme="light"] .prof-settings-row b,
+:root[data-theme="light"] .prof-hero-row strong,
+:root[data-theme="light"] .prof-champion > span,
+:root[data-theme="light"] .prof-kda,
+:root[data-theme="light"] .prof-bg-grid button,
+:root[data-theme="light"] .prof-emoji-grid button {
+  color: #172033;
+}
+
+/* 浅色主题下上面那条 button 规则的优先级高于 .prof-emoji-grid button.selected，
+   选中态的紫色描边会被覆盖掉；这里用同样带主题限定的选择器把选中态补回来。 */
+:root[data-theme="light"] .prof-emoji-grid button.selected {
+  border-color: #6d28d9;
+  box-shadow: 0 0 0 1px #6d28d9 inset;
+  background: rgba(109, 40, 217, 0.08);
+}
+
+:root[data-theme="light"] .prof-bio.ant-typography,
+:root[data-theme="light"] .prof-kda i,
+:root[data-theme="light"] .prof-settings-note {
+  color: #4a5670;
+}
+
+:root[data-theme="light"] .prof-rank,
+:root[data-theme="light"] .prof-avatar-actions a {
+  color: #6d28d9;
+}
+
+:root[data-theme="light"] .prof-tag {
+  color: #33415a;
+  background: rgba(148, 163, 184, 0.22);
+}
+
+:root[data-theme="light"] .prof-green {
+  color: #15803d !important;
+}
+
+:root[data-theme="light"] .prof-red {
+  color: #b91c1c !important;
+}
+
+:root[data-theme="light"] .prof-gold {
+  color: #a16207 !important;
+}
+
+:root[data-theme="light"] .prof-cyan {
+  color: #0e7490 !important;
+}
+
+:root[data-theme="light"] .prof-share {
+  color: #15803d;
+}
+
+:root[data-theme="light"] .prof-hero-row img,
+:root[data-theme="light"] .prof-champion img,
+:root[data-theme="light"] .prof-hero-row > b,
+:root[data-theme="light"] .prof-champion > b {
+  background: #eef2ff;
+}
+
+.ant-alert.ant-alert-warning.ant-alert-outlined.ant-alert-with-description.auth-rank-notice {
+  margin-bottom: 10px;
+}
+
+/* ---------- 段位展示 ---------- */
+
+/* 段位图标 + 文字，所有展示段位的地方共用。
+
+   两个坑写在这里：
+   1. 选择器必须写成两个类。页面里已有 `.lineup article img`、`.result-row img`、
+      `.roster img` 这类“区域 + img”规则（1 个类 + 1~2 个元素），单个类级别的
+      .rank-icon 会被它们盖掉，图标就被改成圆头像尺寸。
+   2. **不能用 inline-flex**。inline-flex 的基线取自第一个子项，而图标是替换元素、
+      其基线就是自己的底边，于是整块会按图标底边被抬到相邻文字的基线之上，
+      内部文字再被 align-items: center 相对图标居中，结果比相邻文字高出约 5px。
+      退回行内布局后，文字自然与相邻文字同基线，图标另用 vertical-align 定位。 */
+.rank-label {
+  white-space: nowrap;
+}
+
+.rank-label .rank-icon {
+  /* 行内块而非行内：宽高生效，且不参与行盒的基线计算（改为看 vertical-align）。 */
+  display: inline-block;
+  flex: none;
+  /* 默认 22px：相对身旁 12~14px 的文字略大一圈，段位徽章细节才看得清。 */
+  width: var(--rank-icon-size, 22px);
+  height: var(--rank-icon-size, 22px);
+  /* 图标纵向中点对齐文字中线。用关键字而不是写死像素，随字号自动缩放。 */
+  vertical-align: middle;
+  margin-right: 5px;
+  border-radius: 0;
+  object-fit: contain;
+  background: none;
+}
+
+/* 榜单表格的行高有 74px，默认尺寸落在里面依旧像个点，单独再放大一档。 */
+.rankings-table .rank-label {
+  --rank-icon-size: 26px;
+}
+
+/* 个人主页档案卡空间充裕，图标跟标题一起放大更醒目。 */
+.prof-rank {
+  --rank-icon-size: 24px;
+}
+
+/* 小字号行内文案（首页排行 11px、阵容/名单 10~12px）旁边收一档，
+   否则图标会明显压过文字。 */
+.rank-line small,
+.lineup article em,
+.roster em {
+  --rank-icon-size: 18px;
+}
+
+/* ---------- 页面辅助说明文字 ---------- */
+
+/* 下面这些信息原先由各页的 page-title 区块承担。标题区块删掉后改用一行小字保留，
+   既不重新占回一大块版面，也不会把关键提示一并丢掉。 */
+.admin-hint {
+  margin: 14px 2px 0;
+  font-size: 12px;
+  color: var(--league-muted);
+}
+
+.players-hint {
+  margin: 0 2px 12px;
+  font-size: 12px;
+  color: var(--league-muted);
+}
+
+.players-hint b {
+  color: var(--league-text);
+}
+
+/* 榜单里领奖台下方表格的标题：说明表格是领奖台的续接，看到开头是「4」也不会误解。 */
+.rank-rest-title {
+  margin: 4px 0 10px;
+  font-size: 12px;
+  color: var(--league-muted);
+}
+
+.rankings-info {
+  color: var(--league-muted);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.rank-podium-name {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.rank-podium-name small {
+  color: var(--league-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* 阵容页头部：返回链接 + 赛事名 + 当前轮次收成一行。 */
+.lineup-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+}
+
+.lineup-head .back {
+  margin-bottom: 0;
+}
+
+.lineup-title {
+  margin: 0;
+  font-size: 20px;
+  color: var(--league-text);
+}
+
+.lineup-round {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--league-muted);
+}
+
+/* ---------- 统一标题排版 ---------- */
+
+/* Windows 上标题实际渲染用的是微软雅黑，它只有 400 / 700 两档字重：
+   此前各页面标题写 600 / 700 / 800，中间字重全部落到 Bold，再叠加大字号与
+   1.5px 字距，大型标题显得方正生硬。这里统一收敛为较柔和的字重与更紧凑的字距，
+   层级主要交给字号与颜色去表达。
+   放在文件末尾是为了覆盖前面各页面自带的标题字重（同优先级下后者生效）。 */
+:root .hero h1,
+:root .section-heading h2,
+:root .match-card h3,
+:root .scoreboard h2,
+:root .player-card h2,
+:root .podium-card h2,
+:root .profile-hero h1,
+:root .profile-side h2,
+:root .match-hero h1,
+:root .roster > h2,
+:root .lineup h2,
+:root .result-hero h1,
+:root .result-table h2,
+:root .dashboard-hero h1,
+:root .prof-identity h1,
+:root .lineup-title {
+  font-family: var(--font-sans);
+  font-weight: var(--font-weight-heading);
+  letter-spacing: var(--heading-tracking);
+}

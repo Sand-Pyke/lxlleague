@@ -1,0 +1,233 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MatchStatus {
+  CREATED
+  LIVE
+  FINISHED
+}
+
+enum AccountStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id              Int               @id @default(autoincrement())
+  username        String            @unique @db.VarChar(24)
+  passwordHash    String
+  isAdmin         Boolean           @default(false)
+  status          AccountStatus     @default(APPROVED)
+  /// 审核备注：目前只在用户申请修改段位时写入「-修改段位」。
+  reviewNote      String            @default("")
+  /// 用户申请修改、等待审核的新段位；空串表示没有待审的段位变更。
+  pendingRank     String            @default("")
+  kookName        String            @default("")
+  backgroundImage String            @default("")
+  importToken     String            @unique @default(cuid())
+  /// 报名处罚截止时间：非空且晚于当前时间时禁止报名；null 表示未处罚。
+  banUntil        DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  profile         PlayerProfile?
+  signups         MatchSignup[]
+  gameRecords     MatchGameRecord[]
+  fmvpMatches     Match[]           @relation("MatchFmvp")
+
+  @@index([status])
+}
+
+model PlayerProfile {
+  id             Int     @id @default(autoincrement())
+  userId         Int     @unique
+  name           String
+  /// 游戏ID（召唤师名，格式 名称#编号）。名称可重复，但 # 后的数字编号全局唯一
+  /// （不区分大小写），由迁移 202609190003 对 split_part 的部分唯一索引保证；
+  /// 空串或不含 # 的旧数据不参与约束。
+  gameName       String
+  mainPosition   String  @default("FILL")
+  subPosition    String  @default("FILL")
+  rank           String  @default("")
+  bio            String  @default("")
+  avatar         String  @default("")
+  /// 自选常用英雄（最多 3 个，逗号分隔的英雄名，与战绩推导出的英雄榜分开存）。
+  favoriteHeroes String  @default("")
+  /// Riot 账号唯一标识（LCU /lol-summoner/v1/current-summoner 的 puuid）。
+  /// 昵称可改、Riot ID 格式也变过，只有 puuid 能稳定地把战绩对到人。
+  puuid          String? @unique
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Match {
+  id           Int               @id @default(autoincrement())
+  name         String
+  /// 赛事排期时间：可选，设置后展示在首页「今日赛事」；未设置为空。
+  date         DateTime?
+  status       MatchStatus       @default(CREATED)
+  bo           String            @default("BO3")
+  playerCount  Int               @default(0)
+  teamCount    Int               @default(2)
+  blueTeam     String            @default("蓝色方")
+  redTeam      String            @default("红色方")
+  blueScore    Int               @default(0)
+  redScore     Int               @default(0)
+  round        String            @default("常规赛")
+  liveUrl      String            @default("")
+  useFee       Boolean           @default(true)
+  recordsConfirmed Boolean        @default(false)
+  currentRound Int               @default(1)
+  teamOneId    Int?
+  teamTwoId    Int?
+  /// 今日 FMVP：赛事最终 MVP 选手（可从已编排队伍的选手中选择）。
+  fmvpUserId   Int?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  signups      MatchSignup[]
+  teams        Team[]
+  teamOne      Team?             @relation("MatchTeamOne", fields: [teamOneId], references: [id], onDelete: SetNull)
+  teamTwo      Team?             @relation("MatchTeamTwo", fields: [teamTwoId], references: [id], onDelete: SetNull)
+  fmvpUser     User?             @relation("MatchFmvp", fields: [fmvpUserId], references: [id], onDelete: SetNull)
+  rounds       MatchRound[]
+  scores       MatchScore[]
+  gameRecords  MatchGameRecord[]
+}
+
+model MatchSignup {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  matchId       Int
+  displayName   String   @default("")
+  mainPosition  String   @default("FILL")
+  subPosition   String   @default("FILL")
+  rankAtSignup  String   @default("")
+  canSubstitute Boolean  @default(false)
+  positionOrder Int      @default(0)
+  teamPosition  String   @default("")
+  teamId        Int?
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match         Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  team          Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, matchId])
+  @@index([matchId])
+  @@index([teamId])
+}
+
+model Team {
+  id           Int               @id @default(autoincrement())
+  matchId      Int
+  name         String
+  /// 队伍顺位（决定对战配对顺序，越小越靠前）；由后台拖拽/重排持久化。
+  sortOrder    Int               @default(0)
+  createdAt    DateTime          @default(now())
+  match        Match             @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  signups      MatchSignup[]
+  roundsAsOne  MatchRound[]      @relation("RoundTeamOne")
+  roundsAsTwo  MatchRound[]      @relation("RoundTeamTwo")
+  scoresAsOne  MatchScore[]      @relation("ScoreTeamOne")
+  scoresAsTwo  MatchScore[]      @relation("ScoreTeamTwo")
+  gameRecords  MatchGameRecord[]
+  matchesAsOne Match[]           @relation("MatchTeamOne")
+  matchesAsTwo Match[]           @relation("MatchTeamTwo")
+
+  @@unique([matchId, name])
+  @@index([matchId])
+}
+
+model MatchRound {
+  id        Int      @id @default(autoincrement())
+  matchId   Int
+  roundNo   Int      @default(1)
+  teamOneId Int
+  teamTwoId Int
+  createdAt DateTime @default(now())
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamOne   Team     @relation("RoundTeamOne", fields: [teamOneId], references: [id], onDelete: Cascade)
+  teamTwo   Team     @relation("RoundTeamTwo", fields: [teamTwoId], references: [id], onDelete: Cascade)
+
+  @@index([matchId, roundNo])
+}
+
+model MatchScore {
+  id        Int      @id @default(autoincrement())
+  matchId   Int
+  roundNo   Int      @default(1)
+  teamOneId Int
+  teamTwoId Int
+  scoreOne  Int      @default(0)
+  scoreTwo  Int      @default(0)
+  updatedAt DateTime @updatedAt
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamOne   Team     @relation("ScoreTeamOne", fields: [teamOneId], references: [id], onDelete: Cascade)
+  teamTwo   Team     @relation("ScoreTeamTwo", fields: [teamTwoId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, roundNo, teamOneId, teamTwoId])
+  @@index([matchId, roundNo])
+}
+
+model MatchGameRecord {
+  id           Int       @id @default(autoincrement())
+  userId       Int
+  matchId      Int?
+  teamId       Int?
+  champion     String
+  result       String
+  kills        Int       @default(0)
+  deaths       Int       @default(0)
+  assists      Int       @default(0)
+  isMvp        Boolean   @default(false)
+  isSvp        Boolean   @default(false)
+  teamRank     Int       @default(0)
+  level        Int       @default(0)
+  cs           Int       @default(0)
+  gold         Int       @default(0)
+  vision       Int       @default(0)
+  items        String    @default("")
+  gameNo       Int       @default(1)
+  roundNo      Int       @default(1)
+  playedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  /// 来源对局 ID（LCU 的 gameId）。手工录入为 null，自动导入用于幂等去重；
+  /// Postgres 的唯一索引把多个 NULL 视为互不相同，因此手工录入不会互相冲突。
+  sourceGameId String?
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match        Match?    @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  team         Team?     @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  /// 同一局里一个玩家只能有一条记录，自动导入靠它做 upsert。
+  @@unique([sourceGameId, userId])
+  @@index([matchId, roundNo, gameNo])
+  @@index([userId, playedAt])
+}
+
+model CommunityComment {
+  id        Int      @id @default(autoincrement())
+  content   String   @db.VarChar(500)
+  createdAt DateTime @default(now())
+  parentId  Int?
+  parent    CommunityComment?  @relation("CommunityReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  comments  CommunityComment[] @relation("CommunityReplies")
+
+  @@index([createdAt])
+  @@index([parentId])
+}
+
+model Video {
+  id          Int      @id @default(autoincrement())
+  title       String   @db.VarChar(100)
+  description String?  @db.VarChar(500)
+  objectKey   String   @unique
+  mimeType    String   @db.VarChar(64)
+  size        Int
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
