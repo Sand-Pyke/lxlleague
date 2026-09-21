@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: crpi-i9zdaj7focplqv2n.cn-hangzhou.personal.cr.aliyuncs.com/lol-champion/postgres:16-alpine
     mem_limit: 700m
     command: >
       postgres
