@@ -28,7 +28,13 @@ export type ItemAsset = {
 };
 
 const champions = championData as ChampionAsset[];
-const items = itemData as ItemAsset[];
+const allItems = itemData as ItemAsset[];
+
+/**
+ * Data Dragon 的全集同时包含斗魂竞技场、旧活动模式等装备。峡谷常规装备 ID 是 1~4 位数；
+ * 例如无尽之刃的 223031 / 773031 是非标准模式条目，不能用于当前峡谷战绩。
+ */
+const items = allItems.filter((item) => /^\d{1,4}$/.test(item.id));
 
 const normalize = (value: string) => value.trim().toLowerCase();
 
@@ -47,7 +53,16 @@ const itemById = new Map<string, ItemAsset>();
 const itemByName = new Map<string, ItemAsset>();
 for (const item of items) {
   itemById.set(item.id, item);
-  itemByName.set(normalize(item.name), item);
+  // 同名装备只保留当前峡谷表中的第一条，避免后续条目覆盖成旧模式图标。
+  if (!itemByName.has(normalize(item.name))) itemByName.set(normalize(item.name), item);
+}
+
+const rawItemById = new Map(allItems.map((item) => [item.id, item]));
+
+function canonicalItemFromId(id: string) {
+  const raw = rawItemById.get(id);
+  if (!raw) return null;
+  return itemByName.get(normalize(raw.name)) ?? itemById.get(id) ?? raw;
 }
 
 /** 按中文称号 / 英雄名 / 英文别名查英雄（战绩里的英雄是自由文本，与旧项目一致）。 */
@@ -66,7 +81,7 @@ export function itemAsset(value: string | number | null | undefined) {
   if (value === null || value === undefined) return null;
   const key = String(value).trim();
   if (!key) return null;
-  return itemById.get(key) ?? itemByName.get(normalize(key)) ?? null;
+  return canonicalItemFromId(key) ?? itemByName.get(normalize(key)) ?? null;
 }
 
 /** 装备图标地址，查不到或没有图标文件时返回空串。 */
@@ -78,7 +93,8 @@ export function itemIcon(value: string | number | null | undefined) {
 export function itemIdFromInput(value: string) {
   const key = value.trim();
   if (!key) return "";
-  if (itemById.has(key)) return key;
+  const byId = canonicalItemFromId(key);
+  if (byId) return byId.id;
   return itemByName.get(normalize(key))?.id ?? "";
 }
 
@@ -131,4 +147,4 @@ export function championNameById(id: string | number | null | undefined) {
 }
 
 /** 装备输入框的联想列表。 */
-export const itemOptions = items.map((item) => item.name);
+export const itemOptions = [...new Set(items.map((item) => item.name))];

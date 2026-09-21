@@ -2,7 +2,7 @@ import type { MatchGameRecord, PlayerProfile, User } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { parseFavoriteHeroes } from "@/lib/favorite-heroes";
-import { championNameById } from "@/lib/game-assets";
+import { championNameById, itemIdFromInput } from "@/lib/game-assets";
 import { ApiError } from "@/server/api";
 import { coreAdminUsername } from "@/server/auth";
 import { assertCanManageUser } from "@/server/permissions";
@@ -65,6 +65,8 @@ function normalizeItems(value: unknown) {
   return raw
     .map((item) => String(item).trim())
     .filter(Boolean)
+    .map((item) => itemIdFromInput(item) || item)
+    .slice(0, 7)
     .join(",")
     .slice(0, 200);
 }

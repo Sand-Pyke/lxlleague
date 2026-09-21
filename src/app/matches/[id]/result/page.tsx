@@ -230,7 +230,7 @@ export default async function Result({
                             <span className="result-items">
                               {row.items.length ? (
                                 row.items
-                                  .slice(0, 6)
+                                  .slice(0, 7)
                                   .map((item, index) =>
                                     itemIcon(item) ? (
                                       <img

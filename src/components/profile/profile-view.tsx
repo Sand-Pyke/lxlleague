@@ -447,7 +447,7 @@ export function ProfileView() {
       width: 200,
       render: (items: string[]) => (
         <div className="prof-items">
-          {Array.from({ length: 6 }, (_, index) => {
+          {Array.from({ length: 7 }, (_, index) => {
             const icon = itemIcon(items[index] ?? "");
             return icon ? (
               <img key={index} src={icon} alt="装备" />

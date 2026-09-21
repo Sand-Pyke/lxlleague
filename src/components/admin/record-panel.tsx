@@ -106,7 +106,8 @@ const newRow = (): RowDraft => ({
 });
 
 const maxGameNo = 5;
-const itemSlots = 6;
+// 六个装备栏加一个饰品栏；自动采集的 item0~item6 不能截掉最后一格。
+const itemSlots = 7;
 
 /** 把「装备名称或 id、中英文逗号分隔」的文本统一成入库用的 id 串（旧项目同样以 id 存库）。 */
 const toItemIds = (value: string) =>
@@ -127,7 +128,7 @@ const itemSlotValues = (value: string) => {
   return Array.from({ length: itemSlots }, (_, index) => parts[index] ?? "");
 };
 
-/** 装备图标串：最多 6 格，没有图标文件的装备显示占位方块。 */
+/** 装备图标串：最多 7 格，没有图标文件的装备显示占位方块。 */
 function ItemIcons({ items }: { items: string[] }) {
   const list = items.filter(Boolean).slice(0, itemSlots);
   if (!list.length) return <Typography.Text type="secondary">-</Typography.Text>;
@@ -1082,7 +1083,9 @@ export function RecordPanel({
               ))}
             </Space>
             <Space orientation="vertical" size={6} style={{ width: "100%" }}>
-              <Typography.Text type="secondary">装备（最多 6 件，可填名称或 id）</Typography.Text>
+              <Typography.Text type="secondary">
+                装备（最多 7 件，含饰品栏；可填名称或 id）
+              </Typography.Text>
               <Space wrap size={6}>
                 {itemSlotValues(editDraft.items).map((slot, index) => (
                   <Space orientation="vertical" size={2} key={`slot-${index}`} align="center">
